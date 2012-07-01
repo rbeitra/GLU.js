@@ -629,7 +629,7 @@ GLU.Object.prototype = {
 
 	},
     unbind: function(){
-        this.geometry.indices.unbind(
+        this.geometry.indices.unbind();
 
         var buffers = this.geometry.buffers;
         for(var attribName in this.geometry.buffers){
