@@ -165,11 +165,13 @@ GLU.Program.prototype = {
         var id = this.gl.getAttribLocation(this.program, attributeName);
         this[extName] = id;
         this.gl.enableVertexAttribArray(id);
+        console.log(extName, id);
     },
     setupUniform: function(uniformName){
         var extName = uniformName;// + "Uniform";
         var id = this.gl.getUniformLocation(this.program, uniformName);
         this[extName] = id;
+        console.log(extName, id);
     }
 }
 
@@ -377,16 +379,17 @@ GLU.Material.prototype = {
             this.gl.activeTexture(this.getGLTextureSlot(textureCount));
             texture.bind();
             this.gl.uniform1i(this.program[uniformName], textureCount);
-//            texture.unbind();
             ++textureCount;
         }
     },
     unbindTextures: function(){
-//        var textureCount = 0;
-//        for(var uniformName in this.textures){
-//            var texture = this.textures[uniformName];
-//            texture.unbind();
-//        }
+        var textureCount = 0;
+        for(var uniformName in this.textures){
+            var texture = this.textures[uniformName];
+            this.gl.activeTexture(this.getGLTextureSlot(textureCount));
+            texture.unbind();
+            ++textureCount;
+        }
     },
 	getGLTextureSlot: function(id){
 		var slotName = 'TEXTURE'+id;
@@ -408,7 +411,6 @@ GLU.Material.prototype = {
         this.gl.disable(this.gl.DEPTH_TEST);
 		this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE);
 		this.gl.disable(this.gl.CULL_FACE);
-//		this.gl.cullFace(this.gl.BACK);
 	}
 }
 
@@ -627,22 +629,12 @@ GLU.Object.prototype = {
 
 	},
     unbind: function(){
-        this.geometry.indices.unbind();
-
-//        for(var i = 0; i < this.uniforms.length; ++i){
-//            var uniform = this.uniforms[i];
-//
-//            //uniform.bind(this.material.program);
-//        }
+        this.geometry.indices.unbind(
 
         var buffers = this.geometry.buffers;
         for(var attribName in this.geometry.buffers){
             var buffer = this.geometry.buffers[attribName];
             buffer.unbind();
-//            var position = this.material.program[attribName];
-//            if(position != undefined){
-//                this.gl.vertexAttribPointer(position, buffer.itemSize, buffer.dataType, false, 0, 0);
-//            }
         }
         this.material.unbind();
 
