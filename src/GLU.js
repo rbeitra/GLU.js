@@ -165,13 +165,11 @@ GLU.Program.prototype = {
         var id = this.gl.getAttribLocation(this.program, attributeName);
         this[extName] = id;
         this.gl.enableVertexAttribArray(id);
-        console.log(extName, id);
     },
     setupUniform: function(uniformName){
         var extName = uniformName;// + "Uniform";
         var id = this.gl.getUniformLocation(this.program, uniformName);
         this[extName] = id;
-        console.log(extName, id);
     }
 }
 
