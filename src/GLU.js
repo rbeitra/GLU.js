@@ -1,13 +1,13 @@
 var GLU = {}
 
 GLU.Error = {
-    errorFactory: function(type) {
-        var errorFunction = function(name, obj) {
-                obj = obj || {};
-                obj.name = name;
-                obj.message = message;
-                return obj;
-            };
+    errorFactory: function(name) {
+        var errorFunction = function(message, obj) {
+            obj = obj || {};
+            obj.name = name;
+            obj.message = message;
+            return obj;
+        };
         return errorFunction;
     },
     registerErrorClass: function(errorClass) {
@@ -147,24 +147,31 @@ GLU.Program = function(gl, shaders, attributes, uniforms) {
 }
 GLU.Program.prototype = {
     bind: function() {
-        this.gl.useProgram(this.program);
+        var gl = this.gl;
+        gl.useProgram(this.program);
         for (var i = 0; i < this.attributes.length; ++i) {
-            this.gl.enableVertexAttribArray(this[this.attributes[i]]);
+            gl.enableVertexAttribArray(this[this.attributes[i]]);
         }
     },
     unbind: function() {
+        var gl = this.gl;
         for (var i = 0; i < this.attributes.length; ++i) {
-            this.gl.disableVertexAttribArray(this[this.attributes[i]]);
+            gl.disableVertexAttribArray(this[this.attributes[i]]);
         }
     },
     setupAttribute: function(attributeName) {
-        var extName = attributeName; // + 'Attribute';
+        var extName = attributeName;
         var id = this.gl.getAttribLocation(this.program, attributeName);
         this[extName] = id;
+        if (id < 0) {
+            throw GLU.Error.Program("Could not setup attribute", {
+                attribute: extName
+            });
+        }
         this.gl.enableVertexAttribArray(id);
     },
     setupUniform: function(uniformName) {
-        var extName = uniformName; // + "Uniform";
+        var extName = uniformName;
         var id = this.gl.getUniformLocation(this.program, uniformName);
         this[extName] = id;
     }
@@ -206,26 +213,27 @@ GLU.Buffer.prototype = {
     },
     arrayToTypedArray: function(array, type) {
         var data;
+        var gl = this.gl;
         switch (this.dataType) {
-        case this.gl.BYTE:
+        case gl.BYTE:
             data = new Int8Array(array);
             break;
-        case this.gl.UNSIGNED_BYTE:
+        case gl.UNSIGNED_BYTE:
             data = new Uint8Array(array);
             break;
-        case this.gl.SHORT:
+        case gl.SHORT:
             data = new Int16Array(array);
             break;
-        case this.gl.UNSIGNED_SHORT:
+        case gl.UNSIGNED_SHORT:
             data = new Uint16Array(array);
             break;
-        case this.gl.INT:
+        case gl.INT:
             data = new Int32Array(array);
             break;
-        case this.gl.UNSIGNED_INT:
+        case gl.UNSIGNED_INT:
             data = new Uint32Array(array);
             break;
-        case this.gl.FLOAT:
+        case gl.FLOAT:
         default:
             data = new Float32Array(array);
             break;
@@ -246,6 +254,8 @@ GLU.Texture = function(gl) {
     this.texture = this.gl.createTexture();
     this.width = 0;
     this.height = 0;
+    this.setWrapClamp();
+    this.setFilterNearest();
 }
 GLU.Texture.prototype = {
     bind: function() {
@@ -254,38 +264,26 @@ GLU.Texture.prototype = {
     unbind: function() {
         this.gl.bindTexture(this.gl.TEXTURE_2D, null);
     },
-    setImage: function(image) {
+    setImage: function(image, makePowerOfTwo) {
+        var gl = this.gl;
+        makePowerOfTwo = makePowerOfTwo || false;
+
+        if(makePowerOfTwo){
+            image = this.createPowerOfTwoImage(image);
+        }
+
         this.width = image.width;
         this.height = image.height;
-        var isPowerOfTwo = this.isPowerOfTwo(image.width) && this.isPowerOfTwo(image.height);
 
         this.bind();
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-        //        this.gl.pixelStorei(this.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-        //        this.gl.pixelStorei(this.gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, this.gl.BROWSER_DEFAULT_WEBGL);
-        //        this.gl.pixelStorei(this.gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, this.gl.NONE);
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
 
-
-        if (isPowerOfTwo) {
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); //no interpolation
-            //            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);//linear
-            //            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);//no mipmapping
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-            //            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
-            //            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR);//nice mipmapping
-            //            this.gl.generateMipmap(this.gl.TEXTURE_2D);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-            //            this.gl.texParameteri( this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
-            //            this.gl.texParameteri( this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT );
-        } else {
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); //no interpolation
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-        }
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        //        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        //        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
+        //        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
         this.unbind();
+        this.createMipmapIfNeeded();
     },
     setFloatData: function(floatArray, width, height) {
         height = height || 1;
@@ -295,14 +293,10 @@ GLU.Texture.prototype = {
 
         var gl = this.gl;
         this.bind();
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, floatArray);
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         this.unbind();
+        this.createMipmapIfNeeded();
     },
     setupRenderBuffer: function(width, height) {
         var gl = this.gl;
@@ -310,24 +304,74 @@ GLU.Texture.prototype = {
         this.height = height;
         this.bind();
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); //no interpolation
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        //      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        //      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-        //      gl.generateMipmap(gl.TEXTURE_2D);
+        this.unbind();
+        this.createMipmapIfNeeded();
+    },
+    setWrapClamp: function(){
+        var gl = this.gl;
+        this.bind();
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         this.unbind();
     },
-    loadImage: function(url) {
+    setWrapRepeat: function(){
+        var gl = this.gl;
+        this.bind();
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        this.unbind();
+    },
+    setFilterNearest: function(){
+        var gl = this.gl;
+        this.bind();
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); //no interpolation
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        this.unbind();
+    },
+    setFilterLinear: function(){
+        var gl = this.gl;
+        this.bind();
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); //linear interpolation
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        this.unbind();
+    },
+    setFilterMipmap: function(){
+        var gl = this.gl;
+        this.bind();
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); //linear interpolation
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        // when images is loaded do gl.generateMipmap(gl.TEXTURE_2D), or this.createMipmapsIfNeeded();
+        this.unbind();
+    },
+    createMipmapIfNeeded: function(){
+        var gl = this.gl;
+        this.bind();
+        var currentMinFilter = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER);
+        switch(currentMinFilter){
+            case gl.NEAREST_MIPMAP_NEAREST:
+            case gl.LINEAR_MIPMAP_NEAREST:
+            case gl.NEAREST_MIPMAP_LINEAR:
+            case gl.LINEAR_MIPMAP_LINEAR:
+                gl.generateMipmap(gl.TEXTURE_2D);
+            break;
+            default:
+                // no mipmap needed
+            break;
+        }
+        this.unbind();
+    },
+    loadImage: function(url, makePowerOfTwo, onComplete) {
         var image = new Image();
         var that = this;
         image.onload = function() {
-            that.setImage(image);
+            that.setImage(image, makePowerOfTwo);
+            if(onComplete){
+                onComplete(that);
+            }
         }
         image.src = url;
     },
     createPowerOfTwoImage: function(image) {
-        //var texture = gl.createTexture();
-        //gl.bindTexture(gl.TEXTURE_2D, texture);
         if (!this.isPowerOfTwo(image.width) || !this.isPowerOfTwo(image.height)) {
             // Scale up the texture to the next highest power of two dimensions.
             var canvas = document.createElement("canvas");
@@ -370,20 +414,22 @@ GLU.Material.prototype = {
         this.bindTextures();
     },
     bindTextures: function() {
+        var gl = this.gl;
         var textureCount = 0;
         for (var uniformName in this.textures) {
             var texture = this.textures[uniformName];
-            this.gl.activeTexture(this.getGLTextureSlot(textureCount));
+            gl.activeTexture(this.getGLTextureSlot(textureCount));
             texture.bind();
-            this.gl.uniform1i(this.program[uniformName], textureCount);
+            gl.uniform1i(this.program[uniformName], textureCount);
             ++textureCount;
         }
     },
     unbindTextures: function() {
         var textureCount = 0;
+        var gl = this.gl;
         for (var uniformName in this.textures) {
             var texture = this.textures[uniformName];
-            this.gl.activeTexture(this.getGLTextureSlot(textureCount));
+            gl.activeTexture(this.getGLTextureSlot(textureCount));
             texture.unbind();
             ++textureCount;
         }
@@ -397,17 +443,19 @@ GLU.Material.prototype = {
         this.program.unbind();
     },
     blendingDefault: function() {
-        this.gl.enable(this.gl.BLEND);
-        this.gl.enable(this.gl.DEPTH_TEST);
-        this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE);
-        this.gl.enable(this.gl.CULL_FACE);
-        this.gl.cullFace(this.gl.BACK);
+        var gl = this.gl;
+        gl.enable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
+        gl.enable(gl.CULL_FACE);
+        gl.cullFace(gl.BACK);
     },
     blendingParticles: function() {
-        this.gl.enable(this.gl.BLEND);
-        this.gl.disable(this.gl.DEPTH_TEST);
-        this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE);
-        this.gl.disable(this.gl.CULL_FACE);
+        var gl = this.gl;
+        gl.enable(gl.BLEND);
+        gl.disable(gl.DEPTH_TEST);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
+        gl.disable(gl.CULL_FACE);
     }
 }
 
@@ -435,10 +483,8 @@ GLU.Geometry.prototype = {
         var halfh = height / 2;
 
         var vertexArray = [-halfw, -halfh, 0, halfw, -halfh, 0, halfw, halfh, 0, -halfw, halfh, 0];
-        var texArray = [
-        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
-        var indexArray = [
-        0, 1, 2, 0, 2, 3];
+        var texArray = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        var indexArray = [0, 1, 2, 0, 2, 3];
         var colorArray = [];
         for (var i = 0; i < 4; ++i) {
             colorArray.push(color.r, color.g, color.b, color.a);
@@ -498,7 +544,78 @@ GLU.Geometry.prototype = {
         }
         this.makeFromArrays(indexArray, vertexArray, vertexName, texArray, texName, colorArray, colorName, normalArray, normalName);
     },
+    makeCube: function(width, height, depth, color, vertexName, texName, colorName, normalName) {
+        width = width || 1;
+        height = height || 1;
+        depth = depth || 1;
+        color = color || {
+            r: 1,
+            g: 1,
+            b: 1,
+            a: 1
+        };
+
+        if (Object.prototype.toString.call(color) !== '[object Array]') {
+            var array = [];
+            for (var i = 0; i < 6; ++i) {
+                array.push(color);
+            }
+            color = array;
+        }
+
+
+        vertexName = vertexName || 'aVertexPosition';
+        texName = texName || 'aTextureCoord';
+        colorName = colorName || 'aColor';
+        normalName = normalName || 'aNormal';
+
+        var vertexArray = [
+            -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, //front
+            -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, //back
+            -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, //top
+            -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, //bottom
+            1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, //right
+            -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0 //left
+        ];
+
+        for (var i = 0; i < vertexArray.length; i += 3) {
+            vertexArray[i] *= width * 0.5;
+            vertexArray[i + 1] *= height * 0.5;
+            vertexArray[i + 2] *= depth * 0.5;
+        }
+        var texArray = [];
+        var normalArray = [];
+        var colorArray = [];
+        for (var i = 0; i < 6; ++i) {
+            var axis = Math.floor(i / 2);
+            var sign = 1 - (i % 2) * 2;
+            var normal = [];
+            for (var j = 0; j < 3; ++j) {
+                var val = j == axis ? 1 : 0;
+                normal.push(val * sign);
+            }
+            var faceColor = color[i];
+
+            texArray.push(0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+            for (var j = 0; j < 4; ++j) {
+                colorArray.push(faceColor.r, faceColor.g, faceColor.b, faceColor.a);
+                normalArray.push(normal[0], normal[1], normal[2]);
+            }
+        }
+
+        var indexArray = [
+            0, 1, 2, 0, 2, 3, //front
+            4, 5, 6, 4, 6, 7, //back
+            8, 9, 10, 8, 10, 11, //top
+            12, 13, 14, 12, 14, 15, //bottom
+            16, 17, 18, 16, 18, 19, //right
+            20, 21, 22, 20, 22, 23 //left
+        ];
+
+        this.makeFromArrays(indexArray, vertexArray, vertexName, texArray, texName, colorArray, colorName, normalArray, normalName);
+    },
     makeFromArrays: function(indexArray, vertexArray, vertexName, texArray, texName, colorArray, colorName, normalArray, normalName) {
+        var gl = this.gl;
         var merged = this.mergePoints(0.0001, indexArray, vertexArray, texArray, colorArray, normalArray);
         indexArray = merged[0];
         vertexArray = vertexArray && merged[1];
@@ -507,27 +624,27 @@ GLU.Geometry.prototype = {
         normalArray = normalArray && merged[4];
 
         if (indexArray) {
-            var indexBuffer = new GLU.Buffer(this.gl, this.gl.ELEMENT_ARRAY_BUFFER, this.gl.UNSIGNED_SHORT, 1, this.gl.STATIC_DRAW);
+            var indexBuffer = new GLU.Buffer(gl, gl.ELEMENT_ARRAY_BUFFER, gl.UNSIGNED_SHORT, 1, gl.STATIC_DRAW);
             indexBuffer.setArray(indexArray);
             this.indices = indexBuffer;
         }
         if (vertexArray && vertexName) {
-            var vertexBuffer = new GLU.Buffer(this.gl, this.gl.ARRAY_BUFFER, this.gl.FLOAT, 3, this.gl.STATIC_DRAW);
+            var vertexBuffer = new GLU.Buffer(gl, gl.ARRAY_BUFFER, gl.FLOAT, 3, gl.STATIC_DRAW);
             vertexBuffer.setArray(vertexArray);
             this.buffers[vertexName] = vertexBuffer;
         }
         if (texArray && texName) {
-            var texBuffer = new GLU.Buffer(this.gl, this.gl.ARRAY_BUFFER, this.gl.FLOAT, 2, this.gl.STATIC_DRAW);
+            var texBuffer = new GLU.Buffer(gl, gl.ARRAY_BUFFER, gl.FLOAT, 2, gl.STATIC_DRAW);
             texBuffer.setArray(texArray);
             this.buffers[texName] = texBuffer;
         }
         if (colorArray && colorName) {
-            var colorBuffer = new GLU.Buffer(this.gl, this.gl.ARRAY_BUFFER, this.gl.FLOAT, 4, this.gl.STATIC_DRAW);
+            var colorBuffer = new GLU.Buffer(gl, gl.ARRAY_BUFFER, gl.FLOAT, 4, gl.STATIC_DRAW);
             colorBuffer.setArray(colorArray);
             this.buffers[colorName] = colorBuffer;
         }
         if (normalArray && normalName) {
-            var normalBuffer = new GLU.Buffer(this.gl, this.gl.ARRAY_BUFFER, this.gl.FLOAT, 3, this.gl.STATIC_DRAW);
+            var normalBuffer = new GLU.Buffer(gl, gl.ARRAY_BUFFER, gl.FLOAT, 3, gl.STATIC_DRAW);
             normalBuffer.setArray(normalArray);
             this.buffers[normalName] = normalBuffer;
         }
@@ -613,6 +730,7 @@ GLU.Object = function(gl, geometry, material, uniforms) {
 }
 GLU.Object.prototype = {
     bind: function() {
+        var gl = this.gl;
         this.material.bind();
 
         //bind buffers
@@ -622,7 +740,7 @@ GLU.Object.prototype = {
             buffer.bind();
             var position = this.material.program[attribName];
             if (position != undefined) {
-                this.gl.vertexAttribPointer(position, buffer.itemSize, buffer.dataType, false, 0, 0);
+                gl.vertexAttribPointer(position, buffer.itemSize, buffer.dataType, false, 0, 0);
             }
         }
 

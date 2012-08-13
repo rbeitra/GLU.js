@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #eee;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id='container'>
+		<canvas id='canvas'></canvas>
+	</div>
+	<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    uniform vec2 uSampler3Shift;
+    uniform sampler2D uSampler1;
+    uniform sampler2D uSampler2;
+    uniform sampler2D uSampler3;
+    uniform sampler2D uSampler4;
+    
+    varying vec2 vTextureCoord;
+    varying float vLighting;
+    varying float vSpecular;
+
+    void main(void) {
+    	vec4 sample1 = texture2D(uSampler1, vTextureCoord);
+    	vec4 sample2 = texture2D(uSampler2, vTextureCoord);
+    	vec2 sample3Coord = vTextureCoord-uSampler3Shift;
+    	vec4 sample3 = texture2D(uSampler3, sample3Coord);
+    	
+    	float specular = pow(vSpecular, sample2.r)*0.5+0.5;
+    	vec3 specularColor = sample1.rgb*specular;
+    	vec3 color = mix(vec3(1.0, 1.0, 1.0), specularColor, sample3.r);
+    	
+    	vec4 sample4 = texture2D(uSampler4, vTextureCoord);
+    	
+    	gl_FragColor = vec4(mix(sample4.rgb, color, vLighting), 1.0);
+    }
+	</script>
+
+	<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aTextureCoord;
+    attribute vec3 aNormal;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+	uniform vec3 uLightDirection;
+
+    varying vec2 vTextureCoord;
+    varying float vLighting;
+    varying float vSpecular;
+
+    void main(void) {
+    	vec4 mvPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+        gl_Position = uPMatrix * mvPosition;
+
+        vec3 eye = normalize(gl_Position.xyz);
+        vec3 reflection = reflect(-uLightDirection, aNormal);
+        
+        vTextureCoord = aTextureCoord;
+        vSpecular = max(dot(reflection, eye), 0.0);
+        vLighting = max(dot(aNormal, uLightDirection), 0.0)*0.95+0.05;
+    }
+	</script>
+
+	<script src="js/RequestAnimationFrame.js"></script>
+	<script src="js/Stats.js"></script>
+	<script src="js/jquery-1.7.min.js"></script>
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="../src/GLU.js"></script>
+
+	<script>
+
+	var container;
+	var canvas;
+	var gl;
+	var gluProgram;
+	var gluGeometry;
+	var gluMaterial;
+	var gluTexture1, gluTexture2, gluTexture3, gluTexture4;
+	var gluTextures;
+	var gluObject, gluObject2;
+	var mouseX = 0, mouseY = 0;
+
+    var mvMatrix = mat4.create();
+    var mvMatrixStack = [];
+    var pMatrix = mat4.create();
+
+	var uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLight;
+
+	function init(){
+		try{
+			container = document.getElementById('container');
+			canvas = document.getElementById('canvas');
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+
+			container.appendChild( stats.domElement );
+
+			initGL(canvas);
+	        updateSize();
+	        gluProgram = new GLU.Program(
+		        gl, 
+		        [new GLU.Shader(gl, 'shader-fs'), new GLU.Shader(gl, 'shader-vs')],//shaders
+		        ['aVertexPosition', 'aTextureCoord', 'aNormal'],//attributes
+		        ['uMVMatrix', 'uPMatrix', 'uColor', 'uSampler1', 'uSampler2', 'uSampler3', 'uSampler4', 'uSampler3Shift', 'uLightDirection']//uniforms
+		    );
+
+		    gluTexture1 = new GLU.Texture(gl);
+		    gluTexture2 = new GLU.Texture(gl);
+		    gluTexture3 = new GLU.Texture(gl);
+		    gluTexture4 = new GLU.Texture(gl);
+		    
+		    gluTextures = [gluTexture1, gluTexture2, gluTexture3, gluTexture4];
+		    for(var i = 0; i < gluTextures.length; ++i){
+		    	gluTextures[i].setFilterMipmap();
+		    	gluTextures[i].setWrapRepeat();
+		    }
+
+		    gluTexture1.loadImage('assets/earth/earthmap1k.jpg', true);
+		    gluTexture2.loadImage('assets/earth/earthspec1k.jpg', true);
+		    gluTexture3.loadImage('assets/earth/earthcloudmaptrans.jpg', true);
+		    gluTexture4.loadImage('assets/earth/earthlights1k.jpg', true);
+
+		    gluMaterial = new GLU.Material(gl, gluProgram, {uSampler1: gluTexture1, uSampler2: gluTexture2, uSampler3: gluTexture3, uSampler4: gluTexture4});
+		    
+		    gluGeometry = new GLU.Geometry(gl);
+		    gluGeometry.makeSphere(64, 32, 0.5, {r: 1, g: 0, b: 1, a: 1}, 'aVertexPosition', 'aTextureCoord', 'aColor', 'aNormal');
+
+		    uMVMatrix = new GLU.Uniform(gl, 'uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uPMatrix = new GLU.Uniform(gl, 'uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uColor = new GLU.Uniform(gl, 'uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+		    uSampler3Shift = new GLU.Uniform(gl, 'uSampler3Shift', '2fv', {shift: new Float32Array([1.0, 1.0])});
+		    uLightDirection = new GLU.Uniform(gl, 'uLightDirection', '3fv', {direction: new Float32Array([1.0, 0.0, 0.0])});
+		    
+		    gluObject = new GLU.Object(gl, gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLightDirection]);
+
+		    console.log(gluObject);
+
+		    $(document).mousemove( function(e) {
+		    	mouseX = e.pageX/canvas.width - 0.5;
+		    	mouseY = e.pageY/canvas.height - 0.5;
+		    });
+		    update();
+        	// setTimeout(update, 1000);
+
+		} catch (e){
+			console.log(e);
+		}
+
+	}
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            var getExt = gl.getExtension("OES_texture_float");//we use this for float textures
+            //console.log(getExt);
+
+	        // gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	        // gl.enable(gl.DEPTH_TEST);
+
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function updateSize(){
+    	var w = $(window).width();
+    	var h = $(window).height();
+    	w = Math.max(w, 128);
+    	h = Math.max(h, 64);
+        gl.viewportWidth = canvas.width = w;
+        gl.viewportHeight = canvas.height = h;
+
+    }
+
+
+    function mvPushMatrix() {
+        var copy = mat4.create();
+        mat4.set(mvMatrix, copy);
+        mvMatrixStack.push(copy);
+    }
+
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+
+
+	function update() {
+		requestAnimationFrame( update );
+		updateSize()
+		render();
+		stats.update();
+	}
+
+	function render() {
+
+        var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
+        var mx = 0;
+        var my = 0;
+        if(mouseLength != 0){
+        	mx = mouseX/mouseLength;
+        	my = mouseY/mouseLength;
+        }
+
+		var time = (new Date()).getTime()*0.001;
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clearColor(0.05, 0.05, 0.1, 1.0);  
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        uPMatrix.matrix = pMatrix;
+        
+        mat4.identity(mvMatrix);
+        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+
+		mat4.rotate(mvMatrix, 2*mouseLength*Math.PI, [my, mx, 0]);
+		uSampler3Shift.shift[0] = (time*0.01)%1;
+
+		uLightDirection.direction[0] = Math.sin(-time*0.31);
+		uLightDirection.direction[2] = Math.cos(-time*0.31);
+
+        var rows = 5;
+        var cols = 7;
+        var spacing = 1.1;
+        var spacingX = spacing;
+        var spacingY = spacing*Math.sqrt(0.75);
+        var total = rows*cols;
+		gluObject.bind();
+        for(var i = 0; i < total; ++i){
+	        mvPushMatrix();
+	        uMVMatrix.matrix = mvMatrix;
+        	var x = i%cols;
+        	var y = Math.floor(i/cols);
+        	var rowShift = (y%2)*0.5 - 0.25;
+        	x = (x - cols/2 + 0.5 + rowShift);
+        	y = (y - rows/2 + 0.5);
+        	var z = Math.sin(time+x)*Math.sin(time+y);
+	        mat4.translate(mvMatrix, [x*spacingX, y*spacingY, z*0.5]);
+
+
+	        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+	        gluObject.updateUniform(uMVMatrix);
+			
+			gluObject.draw();
+
+			mvPopMatrix();
+		}
+	}
+
+	init();
+
+	</script>
+
+	</body>
+</html>

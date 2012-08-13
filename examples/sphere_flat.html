@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #eee;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id='container'>
+		<canvas id='canvas'></canvas>
+	</div>
+	<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    uniform vec4 uColor;
+    varying vec4 vPosition;
+    
+    void main(void) {
+    	vec4 color = uColor;
+        gl_FragColor = color;
+    }
+	</script>
+
+	<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aTextureCoord;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+
+    varying vec4 vPosition;
+
+    void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        vPosition = gl_Position;
+    }
+	</script>
+
+	<script src="js/RequestAnimationFrame.js"></script>
+	<script src="js/Stats.js"></script>
+	<script src="js/jquery-1.7.min.js"></script>
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="../src/GLU.js"></script>
+
+	<script>
+
+	var container;
+	var canvas;
+	var gl;
+	var gluProgram;
+	var gluGeometry;
+	var gluMaterial;
+	var gluObject, gluObject2;
+	var mouseX = 0, mouseY = 0;
+
+    var mvMatrix = mat4.create();
+    var mvMatrixStack = [];
+    var pMatrix = mat4.create();
+
+	var uMVMatrix, uPMatrix, uColor;
+
+	function init(){
+		try{
+			container = document.getElementById('container');
+			canvas = document.getElementById('canvas');
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+
+			container.appendChild( stats.domElement );
+
+			initGL(canvas);
+	        updateSize();
+	        gluProgram = new GLU.Program(
+		        gl, 
+		        [new GLU.Shader(gl, 'shader-fs'), new GLU.Shader(gl, 'shader-vs')],//shaders
+		        ['aVertexPosition'],//attributes
+		        ['uMVMatrix', 'uPMatrix', 'uColor']//uniforms
+		    );
+
+
+		    gluMaterial = new GLU.Material(gl, gluProgram, {});
+		    
+		    gluGeometry = new GLU.Geometry(gl);
+		    gluGeometry.makeSphere(16, 8, 0.25, {r: 1, g: 0, b: 1, a: 1}, 'aVertexPosition', 'aTextureCoord', 'aColor');
+
+		    uMVMatrix = new GLU.Uniform(gl, 'uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uPMatrix = new GLU.Uniform(gl, 'uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uColor = new GLU.Uniform(gl, 'uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+		    
+		    gluObject = new GLU.Object(gl, gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor]);
+
+		    $(document).mousemove( function(e) {
+		    	mouseX = e.pageX/canvas.width - 0.5;
+		    	mouseY = e.pageY/canvas.height - 0.5;
+		    });
+
+			update();
+
+		} catch (e){
+			console.log(e);
+		}
+
+	}
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            var getExt = gl.getExtension("OES_texture_float");//we use this for float textures
+            
+	        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	        gl.enable(gl.DEPTH_TEST);
+
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function updateSize(){
+    	var w = $(window).width();
+    	var h = $(window).height();
+    	w = Math.max(w, 128);
+    	h = Math.max(h, 64);
+        gl.viewportWidth = canvas.width = w;
+        gl.viewportHeight = canvas.height = h;
+    }
+
+
+    function mvPushMatrix() {
+        var copy = mat4.create();
+        mat4.set(mvMatrix, copy);
+        mvMatrixStack.push(copy);
+    }
+
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+
+
+	function update() {
+		requestAnimationFrame( update );
+		updateSize()
+		render();
+		stats.update();
+	}
+
+	function render() {
+
+        var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
+        var mx = 0;
+        var my = 0;
+        if(mouseLength != 0){
+        	mx = mouseX/mouseLength;
+        	my = mouseY/mouseLength;
+        }
+
+		var time = (new Date()).getTime()*0.001;
+		var bgColor = {
+			r: Math.sin(time*0.1)*0.5+0.5,
+			g: Math.sin(time*0.11)*0.5+0.5,
+			b: Math.sin(time*0.09)*0.5+0.5,
+			a: 1
+		}
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);  
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.identity(mvMatrix);
+        
+        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+
+		mat4.rotate(mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
+        var rows = 21;
+        var cols = 31;
+        var spacing = 0.3;
+        var total = rows*cols;
+		gluObject.bind();
+        for(var i = 0; i < total; ++i){
+	        mvPushMatrix();
+	        uMVMatrix.matrix = mvMatrix;
+	        var x = i%cols;
+        	var y = Math.floor(i/cols);
+        	x = (x - cols/2 + 0.5);
+        	y = (y - rows/2 + 0.5);
+        	var z = Math.sin(time+x)*Math.sin(time+y);
+	        mat4.translate(mvMatrix, [x*spacing, y*spacing, z*0.5]);
+	        
+	        uColor.color =[
+				Math.sin(i*0.09+time*0.1)*0.5+0.5,
+				Math.sin(i+time*0.11)*0.5+0.5,
+				Math.sin(i*0.11 + time*0.9)*0.5+0.5,
+				1
+			];
+	        
+	        gluObject.updateUniform(uColor);
+
+	        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+	        gluObject.updateUniform(uMVMatrix);
+			gluObject.draw();
+			
+
+	        mat4.rotate(mvMatrix, time*0.05, [0, 1, 0])
+			mat4.scale(mvMatrix, [1.01, 1.01, 1.01])
+			gluObject.updateUniform(uMVMatrix);
+			gluObject.draw();
+
+			mvPopMatrix();
+		}
+	}
+
+	init();
+
+	</script>
+
+	</body>
+</html>
