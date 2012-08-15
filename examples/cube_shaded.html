@@ -65,6 +65,7 @@
 	var container;
 	var canvas;
 	var gl;
+	var glu;
 	var gluProgram;
 	var gluGeometry;
 	var gluMaterial;
@@ -89,18 +90,20 @@
 
 			container.appendChild( stats.domElement );
 
-			initGL(canvas);
-	        updateSize();
-	        gluProgram = new GLU.Program(
-		        gl, 
-		        [new GLU.Shader(gl, 'shader-fs'), new GLU.Shader(gl, 'shader-vs')],//shaders
+			glu = new GLU.Context();
+			glu.initGL(canvas);
+			gl = glu.gl;
+			
+			updateSize();
+	        gluProgram = glu.Program(
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
 		        ['aVertexPosition', 'aNormal', 'aColor'],//attributes
 		        ['uMVMatrix', 'uPMatrix', 'uLightDirection']//uniforms
 		    );
 
-		    gluMaterial = new GLU.Material(gl, gluProgram, {});
+		    gluMaterial = glu.Material(gluProgram, {});
 		    
-		    gluGeometry = new GLU.Geometry(gl);
+		    gluGeometry = glu.Geometry();
 		    var colors = [];
 		    for(var i = 0; i < 6; ++i){
 		    	var axis = Math.floor(i/2);
@@ -111,11 +114,11 @@
 		    }
 		    gluGeometry.makeCube(2, 2, 2, colors, 'aVertexPosition', 'aTextureCoord', 'aColor', 'aNormal');
 
-		    uMVMatrix = new GLU.Uniform(gl, 'uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
-		    uPMatrix = new GLU.Uniform(gl, 'uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
-		    uLightDirection = new GLU.Uniform(gl, 'uLightDirection', '3fv', {direction: new Float32Array([1.0, 0.0, 0.0])});
+		    uMVMatrix = glu.Uniform('uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uLightDirection = glu.Uniform('uLightDirection', '3fv', {direction: new Float32Array([1.0, 0.0, 0.0])});
 		    
-		    gluObject = new GLU.Object(gl, gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uLightDirection]);
+		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uLightDirection]);
 
 		    $(document).mousemove( function(e) {
 		    	mouseX = e.pageX/canvas.width - 0.5;
@@ -125,24 +128,9 @@
 
 		} catch (e){
 			console.log(e);
+			console.log(e.stack);
 		}
 	}
-
-    function initGL(canvas) {
-        try {
-            gl = canvas.getContext("experimental-webgl");
-            var getExt = gl.getExtension("OES_texture_float");//we use this for float textures
-            
-	        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-	        gl.enable(gl.DEPTH_TEST);
-
-        } catch (e) {
-        }
-        if (!gl) {
-            alert("Could not initialise WebGL, sorry :-(");
-        }
-    }
-
 
     function updateSize(){
     	var w = $(window).width();
@@ -152,7 +140,6 @@
         gl.viewportWidth = canvas.width = w;
         gl.viewportHeight = canvas.height = h;
     }
-
 
     function mvPushMatrix() {
         var copy = mat4.create();
@@ -180,6 +167,7 @@
         var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
         var mx = 0;
         var my = 0;
+
         if(mouseLength != 0){
         	mx = mouseX/mouseLength;
         	my = mouseY/mouseLength;
@@ -192,34 +180,16 @@
         
         mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
         mat4.identity(mvMatrix);
-        var wobble = 0.5;
-        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
 
+        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
 		mat4.rotate(mvMatrix, 4*mouseLength*Math.PI, [my, mx, 0]);
-        var rows = 1;
-        var cols = 1;
-        var spacing = 0.3;
-        var total = rows*cols;
+        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+        
         uLightDirection.direction[0] = Math.sin(time);
         uLightDirection.direction[1] = Math.cos(time);
 
 		gluObject.bind();
-        for(var i = 0; i < total; ++i){
-	        mvPushMatrix();
-	        uMVMatrix.matrix = mvMatrix;
-	        var x = i%cols;
-        	var y = Math.floor(i/cols);
-        	x = (x - cols/2 + 0.5);
-        	y = (y - rows/2 + 0.5);
-        	var z = 0;
-	        mat4.translate(mvMatrix, [x*spacing, y*spacing, z*0.5]);
-	        
-	        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
-	        gluObject.updateUniform(uMVMatrix);
-			gluObject.draw();
-
-			mvPopMatrix();
-		}
+		gluObject.draw();
 	}
 
 	init();

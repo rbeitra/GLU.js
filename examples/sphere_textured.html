@@ -86,6 +86,7 @@
 	var container;
 	var canvas;
 	var gl;
+	var glu;
 	var gluProgram;
 	var gluGeometry;
 	var gluMaterial;
@@ -110,20 +111,20 @@
 			stats.domElement.style.top = '0px';
 
 			container.appendChild( stats.domElement );
-
-			initGL(canvas);
-	        updateSize();
-	        gluProgram = new GLU.Program(
-		        gl, 
-		        [new GLU.Shader(gl, 'shader-fs'), new GLU.Shader(gl, 'shader-vs')],//shaders
+			glu = new GLU.Context();
+			glu.initGL(canvas);
+			gl = glu.gl;
+			updateSize();
+	        gluProgram = glu.Program(
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
 		        ['aVertexPosition', 'aTextureCoord', 'aNormal'],//attributes
 		        ['uMVMatrix', 'uPMatrix', 'uColor', 'uSampler1', 'uSampler2', 'uSampler3', 'uSampler4', 'uSampler3Shift', 'uLightDirection']//uniforms
 		    );
 
-		    gluTexture1 = new GLU.Texture(gl);
-		    gluTexture2 = new GLU.Texture(gl);
-		    gluTexture3 = new GLU.Texture(gl);
-		    gluTexture4 = new GLU.Texture(gl);
+		    gluTexture1 = glu.Texture();
+		    gluTexture2 = glu.Texture();
+		    gluTexture3 = glu.Texture();
+		    gluTexture4 = glu.Texture();
 		    
 		    gluTextures = [gluTexture1, gluTexture2, gluTexture3, gluTexture4];
 		    for(var i = 0; i < gluTextures.length; ++i){
@@ -136,20 +137,18 @@
 		    gluTexture3.loadImage('assets/earth/earthcloudmaptrans.jpg', true);
 		    gluTexture4.loadImage('assets/earth/earthlights1k.jpg', true);
 
-		    gluMaterial = new GLU.Material(gl, gluProgram, {uSampler1: gluTexture1, uSampler2: gluTexture2, uSampler3: gluTexture3, uSampler4: gluTexture4});
+		    gluMaterial = glu.Material(gluProgram, {uSampler1: gluTexture1, uSampler2: gluTexture2, uSampler3: gluTexture3, uSampler4: gluTexture4});
 		    
-		    gluGeometry = new GLU.Geometry(gl);
-		    gluGeometry.makeSphere(64, 32, 0.5, {r: 1, g: 0, b: 1, a: 1}, 'aVertexPosition', 'aTextureCoord', 'aColor', 'aNormal');
+		    gluGeometry = glu.Geometry();
+		    gluGeometry.makeSphere(32, 16, 0.5, {r: 1, g: 0, b: 1, a: 1}, 'aVertexPosition', 'aTextureCoord', 'aColor', 'aNormal');
 
-		    uMVMatrix = new GLU.Uniform(gl, 'uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
-		    uPMatrix = new GLU.Uniform(gl, 'uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
-		    uColor = new GLU.Uniform(gl, 'uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
-		    uSampler3Shift = new GLU.Uniform(gl, 'uSampler3Shift', '2fv', {shift: new Float32Array([1.0, 1.0])});
-		    uLightDirection = new GLU.Uniform(gl, 'uLightDirection', '3fv', {direction: new Float32Array([1.0, 0.0, 0.0])});
+		    uMVMatrix = glu.Uniform('uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uColor = glu.Uniform('uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+		    uSampler3Shift = glu.Uniform('uSampler3Shift', '2fv', {shift: new Float32Array([1.0, 1.0])});
+		    uLightDirection = glu.Uniform('uLightDirection', '3fv', {direction: new Float32Array([1.0, 0.0, 0.0])});
 		    
-		    gluObject = new GLU.Object(gl, gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLightDirection]);
-
-		    console.log(gluObject);
+		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLightDirection]);
 
 		    $(document).mousemove( function(e) {
 		    	mouseX = e.pageX/canvas.width - 0.5;
@@ -160,25 +159,10 @@
 
 		} catch (e){
 			console.log(e);
+			console.log(e.stack);
 		}
 
 	}
-
-    function initGL(canvas) {
-        try {
-            gl = canvas.getContext("experimental-webgl");
-            var getExt = gl.getExtension("OES_texture_float");//we use this for float textures
-            //console.log(getExt);
-
-	        // gl.clearColor(0.0, 0.0, 0.0, 1.0);
-	        // gl.enable(gl.DEPTH_TEST);
-
-        } catch (e) {
-        }
-        if (!gl) {
-            alert("Could not initialise WebGL, sorry :-(");
-        }
-    }
 
 
     function updateSize(){
@@ -188,7 +172,6 @@
     	h = Math.max(h, 64);
         gl.viewportWidth = canvas.width = w;
         gl.viewportHeight = canvas.height = h;
-
     }
 
 
