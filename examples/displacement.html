@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #eee;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id='container'>
+		<canvas id='canvas'></canvas>
+	</div>
+	<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    uniform sampler2D uSamplerColor;
+    varying vec2 vTextureCoord;
+    uniform vec4 uColor;
+    varying vec4 vPosition;
+    varying float vLighting;
+    
+    void main(void) {
+    	float lighting = vLighting;
+    	//lighting = floor(lighting*4.0)/4.0;
+        vec4 texColor = texture2D(uSamplerColor, vTextureCoord);
+        vec4 color = uColor*texColor*vec4(lighting, lighting, lighting, 1.0);
+        gl_FragColor = color;
+    }
+	</script>
+
+	<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec3 aNormal;
+    attribute vec2 aTextureCoord;
+
+    uniform sampler2D uSamplerDisplacement;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    uniform vec4 uDisplacement;
+    uniform vec2 uDisplacementOffset;
+
+    varying vec4 vPosition;
+    varying float vLighting;
+    varying vec2 vTextureCoord;
+
+
+    vec4 getRotation(vec3 axis, float angle){
+        angle = angle * 0.5;
+        float s = sin(angle);
+        vec4 result = vec4(s*axis.x, s*axis.y, s*axis.z, cos(angle));
+        return result;
+    }
+
+    vec3 rotate(vec3 v, vec4 rotation)       {
+        return v + 2.0*cross(rotation.xyz, cross(rotation.xyz,v) + rotation.w*v);
+    }
+
+    float cheapSin(float t){
+        return t*0.636;
+    }
+    float cheapCos(float t){
+        return 1.0 - t*0.636;
+    }
+
+    vec3 rotateX(vec3 v, float t){
+        float s = sin(t);
+        float c = cos(t);
+        vec3 result = vec3(v.x, v.y*c + v.z*s, v.z*c - v.y*s);
+        return result;
+    }
+    vec3 rotateY(vec3 v, float t){
+        float s = sin(t);
+        float c = cos(t);
+        vec3 result = vec3(v.x*c - v.z*s, v.y, v.z*c + v.x*s);
+        return result;
+    }
+    vec3 rotateZ(vec3 v, float t){
+        float s = sin(t);
+        float c = cos(t);
+        vec3 result = vec3(v.x*c + v.y*s, v.y*c - v.x*s, v.z);
+        return result;
+    }
+    vec3 rotateFromY(vec3 v, float t){
+        vec3 axis = cross(v, vec3(0.0, 1.0, 0.0));
+        vec4 rotation = getRotation(axis, t);
+        vec3 rotated = rotate(v, rotation);
+        return rotated;
+    }
+    vec3 rotateFromZ(vec3 v, float t){
+        vec3 axis = cross(v, vec3(0.0, 0.0, 1.0));
+        vec4 rotation = getRotation(axis, t);
+        vec3 rotated = rotate(v, rotation);
+        return rotated;
+    }
+
+    float getDisplacement(vec2 textureCoord){
+        vec4 displacements = uDisplacement*texture2D(uSamplerDisplacement, textureCoord);
+        float displacement = displacements[0]+displacements[1]+displacements[2]+displacements[3];
+        return displacement;
+    }
+
+    void main(void) {
+        //TODO: use normal maps instead of this crazyness
+        vec2 displacementCoord = aTextureCoord + uDisplacementOffset;
+        float deltaOffset = 0.0001;
+        float deltaOffsetX = deltaOffset;//*(1.0/(cos((0.5 - displacementCoord.y)*1.57)));
+        float deltaOffsetY = deltaOffset;//*(1.0/(cos((0.5 - displacementCoord.x)*1.57)));
+        float displacement = getDisplacement(displacementCoord);
+        float displacementDX = getDisplacement(displacementCoord + vec2(deltaOffsetX, 0)) - getDisplacement(displacementCoord + vec2(-deltaOffsetX, 0));
+        float displacementDY = getDisplacement(displacementCoord + vec2(0, deltaOffsetY)) - getDisplacement(displacementCoord + vec2(0, -deltaOffsetY));
+        float displacementAngleX = 0.5*atan(displacementDX*5000.0);
+        float displacementAngleY = 0.5*atan(displacementDY*5000.0);
+        vec3 tweakedNormal = aNormal;
+        tweakedNormal = rotateY(tweakedNormal, displacementAngleX);
+        tweakedNormal = rotateFromY(tweakedNormal, -displacementAngleY);
+        vec3 position = aVertexPosition + aNormal*displacement;
+        gl_Position = uPMatrix * uMVMatrix * vec4(position, 1.0);
+        vLighting = dot(tweakedNormal, vec3(1.0, 0.0, 0.0));
+        vLighting = vLighting*0.5 + 0.5;;
+        vLighting = vLighting*0.95 + 0.05;
+        vPosition = gl_Position;
+        vTextureCoord = aTextureCoord;
+    }
+	</script>
+
+	<script src="js/RequestAnimationFrame.js"></script>
+	<script src="js/Stats.js"></script>
+	<script src="js/jquery-1.7.min.js"></script>
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="../src/GLU.js"></script>
+
+	<script>
+
+	var container;
+	var canvas;
+	var gl;
+	var glu;
+	var gluProgram;
+	var gluGeometry;
+	var gluMaterial;
+	var gluObject, gluObject2;
+    var gluTexDisplacement;
+    var gluTexture;
+	var mouseX = 0, mouseY = 0;
+
+    var mvMatrix = mat4.create();
+    var mvMatrixStack = [];
+    var pMatrix = mat4.create();
+
+	var uMVMatrix, uPMatrix, uColor, uDisplacement, uDisplacementOffset;
+
+	function init(){
+		try{
+			container = document.getElementById('container');
+			canvas = document.getElementById('canvas');
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+
+			container.appendChild( stats.domElement );
+
+			var glu = new GLU.Context();
+			glu.initGL(canvas);
+			gl = glu.gl;
+
+	        updateSize();
+	        gluProgram = glu.Program(
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
+		        ['aVertexPosition', 'aTextureCoord', 'aNormal'],//attributes
+		        ['uMVMatrix', 'uPMatrix', 'uColor', 'uDisplacement', 'uDisplacementOffset', 'uSamplerDisplacement', 'uSamplerColor']//uniforms
+		    );
+
+            var txWidth = 2048;
+            var txHeight = 1024;
+            var txDims = 4;
+            var txArray = new Float32Array(txWidth*txHeight*txDims);
+            for(var j = 0; j < txHeight; ++j){
+                for(var i = 0; i < txWidth; ++i){
+                    var u = i/txWidth;
+                    var v = j/txHeight;
+                    var k = (i+j*txWidth)*txDims;
+                    txArray[k+0] = ((u*4)%1) * ((v*8)%1);
+                    txArray[k+1] = Math.sin(u*Math.PI*16)*0.5;
+                    txArray[k+2] = Math.sin(v*Math.PI*32)*0.5;
+
+                    var z = Math.cos((v)*Math.PI);
+                    var vscale = Math.sin(v*Math.PI);
+                    var x = Math.sin(u*Math.PI*2);
+                    var y = Math.cos(u*Math.PI*2);
+                    x *= vscale;
+                    y *= vscale;
+
+                    var sx = x<0?-1:1;
+                    var sy = y<0?-1:1;
+                    var sz = z<0?-1:1;
+                    var ax = Math.abs(x);
+                    var ay = Math.abs(y);
+                    var az = Math.abs(z);
+                    var s;
+                    if(ax > ay){
+                        if(az > ax){
+                            s = sz/z;
+                        } else {
+                            s = sx/x;
+                        }
+                    } else {
+                        if(az > ay){
+                            s = sz/z;
+                        } else {
+                            s = sy/y;
+                        }
+                    }
+                    var d = s - 1;
+                    txArray[k+3] = d;
+                }
+            }
+
+            gluTexDisplacement = glu.Texture();
+//            gluTexDisplacement.setFilterMipmap();
+            gluTexDisplacement.setFilterLinear();
+            gluTexDisplacement.setWrapRepeat();
+            gluTexDisplacement.setFloatData(txArray, txWidth, txHeight, gl.RGBA);
+
+            gluTexture = glu.Texture();
+            gluTexture.setFilterMipmap();
+            gluTexture.setWrapRepeat();
+            gluTexture.loadImage('assets/earth/earthmap1k.jpg', true);
+
+		    gluMaterial = glu.Material(gluProgram, {uSamplerDisplacement: gluTexDisplacement, uSamplerColor: gluTexture});
+            gluMaterial.setModeTriangles();
+
+            gluGeometry = glu.Geometry();
+		    gluGeometry.makeSphere(256, 128, 1, {r: 1, g: 0, b: 1, a: 1}, 'aVertexPosition', 'aTextureCoord', 'aColor', 'aNormal');
+
+		    uMVMatrix = glu.Uniform('uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+            uColor = glu.Uniform('uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+            uDisplacement = glu.Uniform('uDisplacement', '4fv', {displacement: new Float32Array([0, 0, 0, 0])});
+            uDisplacementOffset = glu.Uniform('uDisplacementOffset', '2fv', {offset: new Float32Array([0, 0])});
+
+            gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor, uDisplacement, uDisplacementOffset]);
+
+		    $(document).mousemove( function(e) {
+		    	mouseX = e.pageX/canvas.width - 0.5;
+		    	mouseY = e.pageY/canvas.height - 0.5;
+		    });
+
+			update();
+
+		} catch (e){
+			console.log(e);
+		}
+
+	}
+
+
+    function updateSize(){
+    	var w = $(window).width();
+    	var h = $(window).height();
+    	w = Math.max(w, 128);
+    	h = Math.max(h, 64);
+        gl.viewportWidth = canvas.width = w;
+        gl.viewportHeight = canvas.height = h;
+    }
+
+
+    function mvPushMatrix() {
+        var copy = mat4.create();
+        mat4.set(mvMatrix, copy);
+        mvMatrixStack.push(copy);
+    }
+
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+
+
+	function update() {
+		requestAnimationFrame( update );
+		updateSize()
+		render();
+		stats.update();
+	}
+
+	function render() {
+
+        var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
+        var mx = 0;
+        var my = 0;
+        if(mouseLength != 0){
+        	mx = mouseX/mouseLength;
+        	my = mouseY/mouseLength;
+        }
+
+		var time = (new Date()).getTime()*0.001;
+        var bgColor = {r: 0.5, g: 0.5, b: 0.5, a: 1};
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);  
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.identity(mvMatrix);
+        
+        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+
+		mat4.rotate(mvMatrix, mouseLength*Math.PI*2, [my, mx, 0]);
+        var rows = 1;
+        var cols = 1;
+        var spacing = 1;
+        var total = rows*cols;
+
+
+        var d = (time*0.25)%4;
+        for(var i = 0; i < 4; ++i){
+            var offset = (d+i+2)%4;
+            var x = Math.abs(offset - 2);
+            x = 1 - x;
+            x = Math.max(x, 0);
+            x = x*x;
+            x = Math.sin((x-0.5)*Math.PI)*0.5 + 0.5;
+            uDisplacement.displacement[i] = x;
+        }
+
+        uColor.color = [1, 1, 1, 1];
+        uDisplacementOffset.offset = [Math.sin(time*0.5), Math.sin(time*0.4)];
+
+		gluObject.bind();
+        for(var i = 0; i < total; ++i){
+	        mvPushMatrix();
+	        uMVMatrix.matrix = mvMatrix;
+	        var x = i%cols;
+        	var y = Math.floor(i/cols);
+        	x = (x - cols/2 + 0.5);
+        	y = (y - rows/2 + 0.5);
+        	var z = Math.sin(time+x)*Math.sin(time+y);
+	        mat4.translate(mvMatrix, [x*spacing, y*spacing, z*0.5]);
+
+            mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+	        gluObject.updateUniform(uMVMatrix);
+			gluObject.draw();
+
+			mvPopMatrix();
+		}
+	}
+
+	init();
+
+	</script>
+
+	</body>
+</html>

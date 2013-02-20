@@ -15,9 +15,11 @@
         errorFactory: function(name){
             var errorFunction = function(message, obj){
                 obj = obj || {};
-                obj.name = name;
-                obj.message = message;
-                return obj;
+                var error = new Error();
+                error.name = name;
+                error.message = message;
+                error.obj = obj;
+                return error;
             };
             return errorFunction;
         },
@@ -66,8 +68,8 @@
         Buffer: function(mode, dataType, itemSize, drawMode){
             return new GLU.Buffer(this.gl, mode, dataType, itemSize, drawMode);
         },
-        Texture: function(type, data, positions){
-            return new GLU.Texture(this.gl, type, data, positions);
+        Texture: function(){
+            return new GLU.Texture(this.gl);
         },
         Material: function(program, textures){
             return new GLU.Material(this.gl, program, textures);
@@ -345,16 +347,17 @@
             this.unbind();
             this.createMipmapIfNeeded();
         },
-        setFloatData: function(floatArray, width, height){
+        setFloatData: function(floatArray, width, height, format){
+            var gl = this.gl;
             height = height || 1;
             width = width || (floatArray.length / height);
+            format = format || gl.RGBA;
             this.width = width;
             this.height = height;
 
-            var gl = this.gl;
             this.bind();
             gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, floatArray);
+            gl.texImage2D(gl.TEXTURE_2D, 0, format, width, height, 0, format, gl.FLOAT, floatArray);
             this.unbind();
             this.createMipmapIfNeeded();
         },
@@ -448,9 +451,11 @@
         },
         nextHighestPowerOfTwo: function(x){
             --x;
-            for (var i = 1; i < 32; i <<= 1){
-                x = x | x >> i;
-            }
+            x = x | x >> 1;
+            x = x | x >> 2;
+            x = x | x >> 4;
+            x = x | x >> 8;
+            x = x | x >> 16;
             return x + 1;
         }
     };
@@ -462,6 +467,7 @@
         this.program = program;
         this.textures = textures || {};
         this.blendFunction = this.blendingDefault;
+        this.setModeTriangles();
     };
     GLU.Material.prototype = {
         bind: function(){
@@ -521,6 +527,15 @@
             gl.disable(gl.DEPTH_TEST);
             gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
             gl.disable(gl.CULL_FACE);
+        },
+        setModeTriangles: function(){
+            this.drawMode = this.gl.TRIANGLES;
+        },
+        setModeLines: function(){
+            this.drawMode = this.gl.LINES;
+        },
+        setModePoints: function(){
+            this.drawMode = this.gl.POINTS;
         }
     };
 
@@ -630,7 +645,6 @@
                 color = array;
             }
 
-
             vertexName = vertexName || 'aVertexPosition';
             texName = texName || 'aTextureCoord';
             colorName = colorName || 'aColor';
@@ -685,6 +699,7 @@
             var gl = this.gl;
             var merged = this.mergePoints(0.0001, indexArray, vertexArray, texArray, colorArray, normalArray);
             indexArray = merged[0];
+
             vertexArray = vertexArray && merged[1];
             texArray = texArray && merged[2];
             colorArray = colorArray && merged[3];
@@ -782,8 +797,6 @@
                 newNArray.push(unique.nx, unique.ny, unique.nz);
             }
 
-            var newLength = newVArray.length / 3;
-
             return [newIArray, newVArray, newTArray, newCArray, newNArray];
         }
     };
@@ -837,7 +850,7 @@
             this.drawNum(this.geometry.indices.length);
         },
         drawNum: function(num){
-            this.gl.drawElements(this.gl.TRIANGLES, num, this.geometry.indices.dataType, 0);
+            this.gl.drawElements(this.material.drawMode, num, this.geometry.indices.dataType, 0);
         }
     };
 

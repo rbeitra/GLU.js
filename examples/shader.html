@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #eee;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id='container'>
+		<canvas id='canvas'></canvas>
+	</div>
+	<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    varying vec2 vTex;
+    uniform vec2 uMouse;
+
+    void main(void) {
+        float x = vTex.x*uMouse.x*4.0;
+        float y = vTex.y*uMouse.y*4.0;
+        x = x - floor(x);
+        y = y - floor(y);
+        float r = floor(x*16.0)/16.0;
+        float g = floor(y*16.0)/16.0;
+        float b = x*16.0;
+        b = b - floor(b);
+
+        vec4 color = vec4(r, g, b, 1.0);
+        gl_FragColor = color;
+    }
+	</script>
+
+	<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aTex;
+
+    varying vec2 vTex;
+
+    void main(void) {
+        gl_Position = vec4(aVertexPosition, 1.0);
+        vTex = aTex;
+    }
+	</script>
+
+	<script src="js/RequestAnimationFrame.js"></script>
+	<script src="js/Stats.js"></script>
+	<script src="js/jquery-1.7.min.js"></script>
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="../src/GLU.js"></script>
+
+	<script>
+
+	var container;
+	var canvas;
+	var gl;
+	var glu;
+	var gluProgram;
+	var gluGeometry;
+	var gluMaterial;
+	var gluObject;
+	var mouseX = 0, mouseY = 0;
+
+	var uMouse;
+
+	function init(){
+		try{
+
+			container = document.getElementById('container');
+			canvas = document.getElementById('canvas');
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+
+			container.appendChild( stats.domElement );
+
+			glu = new GLU.Context();
+			glu.initGL(canvas);
+			gl = glu.gl;
+			
+			updateSize();
+	        gluProgram = glu.Program(
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
+		        ['aVertexPosition', 'aTex'],//attributes
+		        ['uMouse']//uniforms
+		    );
+
+		    gluMaterial = glu.Material(gluProgram, {});
+		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
+		    
+		    gluGeometry = glu.Geometry();
+		    gluGeometry.makeRect(2, 2, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aTex');
+
+            uMouse = glu.Uniform('uMouse', '2fv', {position: new Float32Array([0, 0])});
+
+		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMouse]);
+
+		    $(document).mousemove( function(e) {
+		    	mouseX = e.pageX/canvas.width;
+		    	mouseY = e.pageY/canvas.height;
+		    });
+			update();
+
+		} catch (e){
+			console.log(e);
+			console.log(e.stack);
+		}
+	}
+
+    function updateSize(){
+    	var w = $(window).width();
+    	var h = $(window).height();
+    	w = Math.max(w, 128);
+    	h = Math.max(h, 64);
+        gl.viewportWidth = canvas.width = w;
+        gl.viewportHeight = canvas.height = h;
+    }
+
+	function update() {
+		requestAnimationFrame( update );
+		updateSize();
+		render();
+		stats.update();
+	}
+
+	function render() {
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        uMouse.position[0] = mouseX;
+        uMouse.position[1] = 1-mouseY;
+		gluObject.bind();
+		gluObject.draw();
+        gluObject.unbind();
+	}
+
+	init();
+
+	</script>
+
+	</body>
+</html>

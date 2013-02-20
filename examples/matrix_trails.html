@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #eee;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id='container'>
+		<canvas id='canvas'></canvas>
+	</div>
+	<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    varying vec4 vColor;
+    varying vec3 vNormal;
+    void main(void) {
+    	vec4 color = vColor;
+        gl_FragColor = color;
+    }
+	</script>
+
+	<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aTexCoord;
+    //attribute vec3 aNormal;
+
+    uniform vec4 uColor;
+    uniform mat4 uMVMatrix0;
+    uniform mat4 uMVMatrix1;
+    uniform mat4 uPMatrix;
+    
+    varying vec4 vColor;
+    varying vec3 vNormal;
+
+
+    void main(void) {
+        mat4 uMVMatrix;
+        float p = aTexCoord.x;
+        uMVMatrix[0] = mix(uMVMatrix0[0], uMVMatrix1[0], p);
+        uMVMatrix[1] = mix(uMVMatrix0[1], uMVMatrix1[1], p);
+        uMVMatrix[2] = mix(uMVMatrix0[2], uMVMatrix1[2], p);
+        uMVMatrix[3] = mix(uMVMatrix0[3], uMVMatrix1[3], p);
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        vColor = uColor;
+    }
+	</script>
+
+	<script src="js/RequestAnimationFrame.js"></script>
+	<script src="js/Stats.js"></script>
+	<script src="js/jquery-1.7.min.js"></script>
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="../src/GLU.js"></script>
+
+	<script>
+
+	var container;
+	var canvas;
+	var gl;
+	var glu;
+	var gluProgram;
+	var gluGeometry;
+	var gluMaterial;
+	var gluObject;
+	var mouseX = 0, mouseY = 0;
+
+    var mvMatrix = mat4.create();
+    var mvMatrixStack = [];
+    var pMatrix = mat4.create();
+    var trailsMatrices = [];
+
+	var uMVMatrix0, uMVMatrix1, uPMatrix, uColor;
+
+	function init(){
+		try{
+
+			container = document.getElementById('container');
+			canvas = document.getElementById('canvas');
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+
+			container.appendChild( stats.domElement );
+
+			glu = new GLU.Context();
+			glu.initGL(canvas);
+			gl = glu.gl;
+			
+			updateSize();
+	        gluProgram = glu.Program(
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
+		        ['aVertexPosition', 'aTexCoord'],//attributes
+		        ['uMVMatrix0', 'uMVMatrix1', 'uPMatrix', 'uColor']//uniforms
+		    );
+
+		    gluMaterial = glu.Material(gluProgram, {});
+		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
+		    
+		    gluGeometry = glu.Geometry();
+		    gluGeometry.makeRect(0.00001, 1, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aTexCoord');
+
+            uMVMatrix0 = glu.Uniform('uMVMatrix0', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+            uMVMatrix1 = glu.Uniform('uMVMatrix1', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
+            uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
+		    uColor = glu.Uniform('uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+		    
+		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix0, uMVMatrix1, uPMatrix, uColor]);
+
+		    $(document).mousemove( function(e) {
+		    	mouseX = e.pageX/canvas.width - 0.5;
+		    	mouseY = e.pageY/canvas.height - 0.5;
+		    });
+			update();
+
+		} catch (e){
+			console.log(e);
+			console.log(e.stack);
+		}
+	}
+
+    function updateSize(){
+    	var w = $(window).width();
+    	var h = $(window).height();
+    	w = Math.max(w, 128);
+    	h = Math.max(h, 64);
+        gl.viewportWidth = canvas.width = w;
+        gl.viewportHeight = canvas.height = h;
+    }
+
+    function mvPushMatrix() {
+        var copy = mat4.create();
+        mat4.set(mvMatrix, copy);
+        mvMatrixStack.push(copy);
+    }
+
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+
+
+	function update() {
+		requestAnimationFrame( update );
+		updateSize()
+		render();
+		stats.update();
+	}
+	var time = 1000000;
+	function render() {
+
+        var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
+        var mx = 0;
+        var my = 0;
+
+        if(mouseLength != 0){
+        	mx = mouseX/mouseLength;
+        	my = mouseY/mouseLength;
+        }
+		// var time = (new Date()).getTime()*0.001;
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clearColor(Math.sin(time*0.11)+0.5, Math.sin(time*0.09)+0.5, Math.sin(time*0.1)+0.5, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+        time += 0.01;
+        mat4.identity(mvMatrix);
+
+        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+        mat4.rotate(mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
+        mat4.rotate(mvMatrix, Math.sin(time*9.92), [0, 1, 0]);
+//        mat4.scale(mvMatrix, [2, 2, 2]);
+        mat4.translate(mvMatrix, [Math.sin(time*0.987), Math.sin(time*1), Math.sin(time*1.17)]);
+        mat4.rotate(mvMatrix, Math.sin(time*10.92), [0, 0, 1]);
+        mat4.scale(mvMatrix, [0.125, 0.125, 0.125]);
+//        mat4.scale(mvMatrix, [0.125, 0.125, 0.125]);
+        if(trailsMatrices.length > 1024){
+            trailsMatrices.shift();
+        }
+        trailsMatrices.push(mat4.create(mvMatrix));
+
+		gluObject.bind();
+		for(var i = 0; i < trailsMatrices.length-1; ++i){
+            var mat0 = trailsMatrices[i];
+            var mat1 = trailsMatrices[i+1];
+            var j = i*0.1+time*5;
+            uMVMatrix0.matrix = mat0;
+            uMVMatrix1.matrix = mat1;
+            uColor.color[0] = Math.sin(j*0.11)*0.5+0.5;
+			uColor.color[1] = Math.sin(j*0.111)*0.5+0.5;
+			uColor.color[2] = Math.sin(j*0.109)*0.5+0.5;
+            gluObject.updateUniform(uMVMatrix0);
+            gluObject.updateUniform(uMVMatrix1);
+            gluObject.updateUniform(uColor);
+			gluObject.draw();
+		}
+	}
+
+	init();
+
+	</script>
+
+	</body>
+</html>
