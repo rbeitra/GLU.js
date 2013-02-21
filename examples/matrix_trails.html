@@ -140,8 +140,7 @@
     }
 
     function mvPushMatrix() {
-        var copy = mat4.create();
-        mat4.set(mvMatrix, copy);
+        var copy = mat4.clone(mvMatrix);
         mvMatrixStack.push(copy);
     }
 
@@ -155,7 +154,7 @@
 
 	function update() {
 		requestAnimationFrame( update );
-		updateSize()
+		updateSize();
 		render();
 		stats.update();
 	}
@@ -175,23 +174,23 @@
         gl.clearColor(Math.sin(time*0.11)+0.5, Math.sin(time*0.09)+0.5, Math.sin(time*0.1)+0.5, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
 
         time += 0.01;
         mat4.identity(mvMatrix);
 
-        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
-        mat4.rotate(mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
-        mat4.rotate(mvMatrix, Math.sin(time*9.92), [0, 1, 0]);
+        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
+        mat4.rotate(mvMatrix, mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*9.92), [0, 1, 0]);
 //        mat4.scale(mvMatrix, [2, 2, 2]);
-        mat4.translate(mvMatrix, [Math.sin(time*0.987), Math.sin(time*1), Math.sin(time*1.17)]);
-        mat4.rotate(mvMatrix, Math.sin(time*10.92), [0, 0, 1]);
-        mat4.scale(mvMatrix, [0.125, 0.125, 0.125]);
+        mat4.translate(mvMatrix, mvMatrix, [Math.sin(time*0.987), Math.sin(time*1), Math.sin(time*1.17)]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*10.92), [0, 0, 1]);
+        mat4.scale(mvMatrix, mvMatrix, [0.125, 0.125, 0.125]);
 //        mat4.scale(mvMatrix, [0.125, 0.125, 0.125]);
         if(trailsMatrices.length > 1024){
             trailsMatrices.shift();
         }
-        trailsMatrices.push(mat4.create(mvMatrix));
+        trailsMatrices.push(mat4.clone(mvMatrix));
 
 		gluObject.bind();
 		for(var i = 0; i < trailsMatrices.length-1; ++i){

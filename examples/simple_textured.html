@@ -129,8 +129,7 @@
     }
 
     function mvPushMatrix() {
-        var copy = mat4.create();
-        mat4.set(mvMatrix, copy);
+        var copy = mat4.clone(mvMatrix);
         mvMatrixStack.push(copy);
     }
 
@@ -165,14 +164,14 @@
         gl.clearColor(0.9, 0.9, 0.9, 1.0);  
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         
-        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
         mat4.identity(mvMatrix);
 
-        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
-		mat4.rotate(mvMatrix, 4*mouseLength*Math.PI, [my, mx, 0]);
-        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
-        
-		gluObject.bind();
+        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
+        mat4.rotate(mvMatrix, mvMatrix, 4*mouseLength*Math.PI, [my, mx, 0]);
+        mat4.rotate(mvMatrix, mvMatrix, time*0.1, [0, 1, 0]);
+
+        gluObject.bind();
 		gluObject.draw();
 		gluObject.unbind();
 	}

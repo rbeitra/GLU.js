@@ -128,8 +128,7 @@
 
 
     function mvPushMatrix() {
-        var copy = mat4.create();
-        mat4.set(mvMatrix, copy);
+        var copy = mat4.clone(mvMatrix);
         mvMatrixStack.push(copy);
     }
 
@@ -168,13 +167,13 @@
 		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);  
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        
-        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+        mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
         mat4.identity(mvMatrix);
         
-        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
 
-		mat4.rotate(mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
+		mat4.rotate(mvMatrix, mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
         var rows = 21;
         var cols = 31;
         var spacing = 0.3;
@@ -188,7 +187,7 @@
         	x = (x - cols/2 + 0.5);
         	y = (y - rows/2 + 0.5);
         	var z = Math.sin(time+x)*Math.sin(time+y);
-	        mat4.translate(mvMatrix, [x*spacing, y*spacing, z*0.5]);
+	        mat4.translate(mvMatrix, mvMatrix, [x*spacing, y*spacing, z*0.5]);
 	        
 	        uColor.color =[
 				Math.sin(i*0.09+time*0.1)*0.5+0.5,
@@ -199,13 +198,13 @@
 	        
 	        gluObject.updateUniform(uColor);
 
-	        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+	        mat4.rotate(mvMatrix, mvMatrix, time*0.1, [0, 1, 0]);
 	        gluObject.updateUniform(uMVMatrix);
 			gluObject.draw();
 			
 
-	        mat4.rotate(mvMatrix, time*0.05, [0, 1, 0])
-			mat4.scale(mvMatrix, [1.01, 1.01, 1.01])
+	        mat4.rotate(mvMatrix, mvMatrix, time*0.05, [0, 1, 0])
+			mat4.scale(mvMatrix, mvMatrix, [1.01, 1.01, 1.01])
 			gluObject.updateUniform(uMVMatrix);
 			gluObject.draw();
 

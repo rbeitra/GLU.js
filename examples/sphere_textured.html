@@ -101,6 +101,8 @@
 
 	var uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLight;
 
+    var texturesLoaded = false;
+
 	function init(){
 		try{
 			container = document.getElementById('container');
@@ -132,10 +134,18 @@
 		    	gluTextures[i].setWrapRepeat();
 		    }
 
-		    gluTexture1.loadImage('assets/earth/earthmap1k.jpg', true);
-		    gluTexture2.loadImage('assets/earth/earthspec1k.jpg', true);
-		    gluTexture3.loadImage('assets/earth/earthcloudmaptrans.jpg', true);
-		    gluTexture4.loadImage('assets/earth/earthlights1k.jpg', true);
+            var texturesToLoad = 4;
+            var onTextureLoad = function(){
+                --texturesToLoad;
+                if(texturesToLoad == 0){
+                    texturesLoaded = true;
+                }
+            };
+
+		    gluTexture1.loadImage('assets/earth/earthmap1k.jpg', true, onTextureLoad);
+		    gluTexture2.loadImage('assets/earth/earthspec1k.jpg', true, onTextureLoad);
+		    gluTexture3.loadImage('assets/earth/earthcloudmaptrans.jpg', true, onTextureLoad);
+		    gluTexture4.loadImage('assets/earth/earthlights1k.jpg', true, onTextureLoad);
 
 		    gluMaterial = glu.Material(gluProgram, {uSampler1: gluTexture1, uSampler2: gluTexture2, uSampler3: gluTexture3, uSampler4: gluTexture4});
 		    
@@ -176,8 +186,7 @@
 
 
     function mvPushMatrix() {
-        var copy = mat4.create();
-        mat4.set(mvMatrix, copy);
+        var copy = mat4.clone(mvMatrix);
         mvMatrixStack.push(copy);
     }
 
@@ -191,8 +200,10 @@
 
 	function update() {
 		requestAnimationFrame( update );
-		updateSize()
-		render();
+		updateSize();
+        if(texturesLoaded){
+		    render();
+        }
 		stats.update();
 	}
 
@@ -210,14 +221,14 @@
 		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clearColor(0.05, 0.05, 0.1, 1.0);  
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        
-        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+        mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
         uPMatrix.matrix = pMatrix;
         
         mat4.identity(mvMatrix);
-        mat4.translate(mvMatrix, [0.0, 0.0, -4]);
+        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
 
-		mat4.rotate(mvMatrix, 2*mouseLength*Math.PI, [my, mx, 0]);
+		mat4.rotate(mvMatrix, mvMatrix, 2*mouseLength*Math.PI, [my, mx, 0]);
 		uSampler3Shift.shift[0] = (time*0.01)%1;
 
 		uLightDirection.direction[0] = Math.sin(-time*0.31);
@@ -239,10 +250,10 @@
         	x = (x - cols/2 + 0.5 + rowShift);
         	y = (y - rows/2 + 0.5);
         	var z = Math.sin(time+x)*Math.sin(time+y);
-	        mat4.translate(mvMatrix, [x*spacingX, y*spacingY, z*0.5]);
+	        mat4.translate(mvMatrix, mvMatrix, [x*spacingX, y*spacingY, z*0.5]);
 
 
-	        mat4.rotate(mvMatrix, time*0.1, [0, 1, 0]);
+	        mat4.rotate(mvMatrix, mvMatrix, time*0.1, [0, 1, 0]);
 	        gluObject.updateUniform(uMVMatrix);
 			
 			gluObject.draw();
