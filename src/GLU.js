@@ -175,15 +175,15 @@
     };
 
 
-    GLU.Program = function(gl, shaders, attributes, uniforms){
+    GLU.Program = function(gl, shaders){
         GLU.Core.apply(this, [gl]);
 
-        attributes = attributes || [];
-        uniforms = uniforms || [];
         shaders = shaders || [];
-        this.attributes = attributes;
-        this.uniforms = uniforms;
+
         this.shaders = shaders;
+
+        this.attributes = [];
+        this.uniforms = [];
 
         var shaderProgram = gl.createProgram();
 
@@ -201,11 +201,15 @@
 
         gl.useProgram(shaderProgram);
 
-        for (var i = 0; i < attributes.length; ++i){
-            this.setupAttribute(attributes[i]);
+        var numAttributes = gl.getProgramParameter(shaderProgram, gl.ACTIVE_ATTRIBUTES);
+        var numUniforms = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
+        for(var i = 0; i < numAttributes; ++i){
+            var activeInfo = gl.getActiveAttrib(shaderProgram, i);
+            this.setupAttribute(activeInfo.name);
         }
-        for (var i = 0; i < uniforms.length; ++i){
-            this.setupUniform(uniforms[i]);
+        for(var i = 0; i < numUniforms; ++i){
+            var activeInfo = gl.getActiveUniform(shaderProgram, i);
+            this.setupUniform(activeInfo.name);
         }
     };
     GLU.Program.prototype = {
@@ -224,19 +228,15 @@
         },
         setupAttribute: function(attributeName){
             var extName = attributeName;
-            var id = this.gl.getAttribLocation(this.program, attributeName);
-            this[extName] = id;
-            if (id < 0){
-                throw GLU.Error.Program("Could not setup attribute", {
-                    attribute: extName
-                });
-            }
-            this.gl.enableVertexAttribArray(id);
+            var location = this.gl.getAttribLocation(this.program, attributeName);
+            this[extName] = location;
+            this.attributes.push(attributeName);
         },
         setupUniform: function(uniformName){
             var extName = uniformName;
-            var id = this.gl.getUniformLocation(this.program, uniformName);
-            this[extName] = id;
+            var location = this.gl.getUniformLocation(this.program, uniformName);
+            this[extName] = location;
+            this.uniforms.push(uniformName);
         }
     };
 
@@ -528,6 +528,12 @@
             gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
             gl.disable(gl.CULL_FACE);
         },
+        blendingNone: function(){
+            var gl = this.gl;
+            gl.disable(gl.BLEND);
+            gl.disable(gl.DEPTH_TEST);
+            gl.disable(gl.CULL_FACE);
+        },
         setModeTriangles: function(){
             this.drawMode = this.gl.TRIANGLES;
         },
@@ -546,7 +552,9 @@
         this.indices = null;
     };
     GLU.Geometry.prototype = {
-        makeRect: function(width, height, color, vertexName, texName, colorName, normalName){
+        makeRect: function(subH, subV, width, height, color, vertexName, texName, colorName, normalName){
+            subH = subH || 1;
+            subV = subV || 1;
             width = width || 1;
             height = height || 1;
             color = color || {
@@ -560,17 +568,34 @@
             colorName = colorName || 'aColor';
             normalName = normalName || 'aNormal';
 
-            var halfw = width / 2;
-            var halfh = height / 2;
-
-            var vertexArray = [-halfw, -halfh, 0, halfw, -halfh, 0, halfw, halfh, 0, -halfw, halfh, 0];
-            var normalArray = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0];
-            var texArray = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
-            var indexArray = [0, 1, 2, 0, 2, 3];
+            var vertexArray = [];
+            var normalArray = [];
+            var texArray = [];
             var colorArray = [];
-            for (var i = 0; i < 4; ++i){
-                colorArray.push(color.r, color.g, color.b, color.a);
+            var indexArray = [];
+            for(var j = 0; j <= subV; ++j){
+                var v = j/subV;
+                for(var i = 0; i <= subH; ++i){
+                    var u = i/subH;
+
+                    var x = (u - 0.5)*width;
+                    var y = (v - 0.5)*height;
+                    var z = 0;
+
+                    vertexArray.push(x, y, z);
+                    normalArray.push(0.0, 0.0, 1.0);
+                    texArray.push(u, v);
+                    colorArray.push(color.r, color.g, color.b, color.a);
+
+                    if(i < subH && j < subV){
+                        var w = subH+1;
+                        var k = i + j * w;
+                        indexArray.push(k, k+1, k+1+w);
+                        indexArray.push(k, k+1+w, k+w);
+                    }
+                }
             }
+
             this.makeFromArrays(indexArray, vertexArray, vertexName, texArray, texName, colorArray, colorName, normalArray, normalName);
         },
         makeSphere: function(segmentsH, segmentsV, radius, color, vertexName, texName, colorName, normalName){
@@ -857,13 +882,13 @@
 
     GLU.Framebuffer = function(gl){
         GLU.Core.apply(this, [gl]);
-        var width = 512;
-        var height = 512;
+        var width = 256;
+        var height = 256;
 
         var framebuffer = this.framebuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-        framebuffer.width = width;
-        framebuffer.height = height;
+        framebuffer.width = 0;
+        framebuffer.height = 0;
 
         var texture = this.texture = new GLU.Texture(gl);
         var renderbuffer = this.renderbuffer = gl.createRenderbuffer();
@@ -893,13 +918,14 @@
             this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
         },
         setSize: function(width, height){
-            var gl = this.gl;
+            if(this.texture.width != width && this.texture.height != height){
+                var gl = this.gl;
+                this.texture.setupRenderBuffer(width, height);
 
-            this.texture.setupRenderBuffer(width, height);
-
-            gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderbuffer);
-            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
-            gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+                gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderbuffer);
+                gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+                gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+            }
         },
         checkRenderbuffer: function(renderbuffer){
             if (!this.gl.isRenderbuffer(renderbuffer)){

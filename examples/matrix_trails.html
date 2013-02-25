@@ -24,35 +24,74 @@
 
     varying vec4 vColor;
     varying vec3 vNormal;
+    varying vec2 vTexCoord;
     void main(void) {
     	vec4 color = vColor;
-        gl_FragColor = color;
+        float lighting = dot(vNormal, vec3(0.0, 0.0, 1.0));
+        lighting = lighting*0.25 + 0.75;
+        float colorShift = floor(vTexCoord.y*2.0)*0.5;
+        color.r = color.r + colorShift;
+        color.r = color.r - floor(color.r);
+        gl_FragColor = vec4(color.rgb*lighting, color.a);
     }
 	</script>
 
 	<script id="shader-vs" type="x-shader/x-vertex">
     attribute vec3 aVertexPosition;
     attribute vec2 aTexCoord;
-    //attribute vec3 aNormal;
+    attribute vec3 aNormal;
+
+    uniform sampler2D uMatrixTex;
+    uniform float uMatrixTexLength;
+    uniform float uMatrixTexOffset;
 
     uniform vec4 uColor;
-    uniform mat4 uMVMatrix0;
-    uniform mat4 uMVMatrix1;
     uniform mat4 uPMatrix;
     
     varying vec4 vColor;
     varying vec3 vNormal;
+    varying vec2 vTexCoord;
 
+    vec4 getMatrixRowFromSampler(float matrixRow, float row){
+        matrixRow = matrixRow + 0.03125;
+        float a = texture2D(uMatrixTex, vec2(matrixRow + 0.0   , row)).x;
+        float b = texture2D(uMatrixTex, vec2(matrixRow + 0.0625, row)).x;
+        float c = texture2D(uMatrixTex, vec2(matrixRow + 0.125 , row)).x;
+        float d = texture2D(uMatrixTex, vec2(matrixRow + 0.1875, row)).x;
+        return vec4(a, b, c, d);
+    }
+
+    mat4 getMatrixFromSampler(float pos){
+        mat4 result;
+        result[0] = getMatrixRowFromSampler(0.0 , pos);
+        result[1] = getMatrixRowFromSampler(0.25, pos);
+        result[2] = getMatrixRowFromSampler(0.5 , pos);
+        result[3] = getMatrixRowFromSampler(0.75, pos);
+        return result;
+    }
+
+    mat4 mixMat4(mat4 a, mat4 b, float p){
+        mat4 result;
+        result[0] = mix(a[0], b[0], p);
+        result[1] = mix(a[1], b[1], p);
+        result[2] = mix(a[2], b[2], p);
+        result[3] = mix(a[3], b[3], p);
+        return result;
+    }
 
     void main(void) {
         mat4 uMVMatrix;
-        float p = aTexCoord.x;
-        uMVMatrix[0] = mix(uMVMatrix0[0], uMVMatrix1[0], p);
-        uMVMatrix[1] = mix(uMVMatrix0[1], uMVMatrix1[1], p);
-        uMVMatrix[2] = mix(uMVMatrix0[2], uMVMatrix1[2], p);
-        uMVMatrix[3] = mix(uMVMatrix0[3], uMVMatrix1[3], p);
-        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        float scale = aTexCoord.x;
+        scale = scale*scale;
+        vec3 position = aVertexPosition*scale;
+        uMVMatrix = getMatrixFromSampler(aTexCoord.x*0.99 + 0.005 + uMatrixTexOffset);
+        vec3 nPosition = position + aNormal;
+        vec4 mvPosition = uMVMatrix * vec4(position, 1.0);
+        vec4 nmvPosition = uMVMatrix * vec4(nPosition, 1.0);
+        gl_Position = uPMatrix * mvPosition;
+        vNormal = normalize(vec4(nmvPosition - mvPosition).xyz);
         vColor = uColor;
+        vTexCoord = aTexCoord;
     }
 	</script>
 
@@ -62,6 +101,7 @@
     <script src="js/webgl-utils.js"></script>
     <script src="js/gl-matrix-min.js"></script>
     <script src="../src/GLU.js"></script>
+    <script src="../src/GLUTIL.js"></script>
 
 	<script>
 
@@ -73,14 +113,19 @@
 	var gluGeometry;
 	var gluMaterial;
 	var gluObject;
+    var renderBuffer;
+    var texPreview;
 	var mouseX = 0, mouseY = 0;
 
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
     var pMatrix = mat4.create();
     var trailsMatrices = [];
+    var uMatrixTex;
+    var uMatrixTexLength;
+    var uMatrixTexOffset;
 
-	var uMVMatrix0, uMVMatrix1, uPMatrix, uColor;
+	var uPMatrix, uColor;
 
 	function init(){
 		try{
@@ -97,28 +142,48 @@
 			glu = new GLU.Context();
 			glu.initGL(canvas);
 			gl = glu.gl;
-			
+
 			updateSize();
 	        gluProgram = glu.Program(
-		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
-		        ['aVertexPosition', 'aTexCoord'],//attributes
-		        ['uMVMatrix0', 'uMVMatrix1', 'uPMatrix', 'uColor']//uniforms
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')]
 		    );
 
-		    gluMaterial = glu.Material(gluProgram, {});
-		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
-		    
-		    gluGeometry = glu.Geometry();
-		    gluGeometry.makeRect(0.00001, 1, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aTexCoord');
 
-            uMVMatrix0 = glu.Uniform('uMVMatrix0', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
-            uMVMatrix1 = glu.Uniform('uMVMatrix1', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
             uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
-		    uColor = glu.Uniform('uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
-		    
-		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix0, uMVMatrix1, uPMatrix, uColor]);
+            uColor = glu.Uniform('uColor', '4fv', {color: new Float32Array([1.0, 1.0, 1.0, 1.0])});
+            uMatrixTexLength = glu.Uniform('uMatrixTexLength', '1f', {length: 256});
+            uMatrixTexOffset = glu.Uniform('uMatrixTexOffset', '1f', {offset: 0});
 
-		    $(document).mousemove( function(e) {
+            var txHeight = uMatrixTexLength.length;
+            var txLength = txHeight*16;
+            var txArray = new Float32Array(txLength);
+            var txMatrix = mat4.create();
+            for(var i = 0; i < txLength; i += 1){
+                txArray[i] = txMatrix[i%16];
+            }
+
+            uMatrixTex = glu.Texture();
+            uMatrixTex.setFilterLinear();
+            uMatrixTex.setWrapRepeat();
+            uMatrixTex.data = txArray;
+
+		    gluMaterial = glu.Material(gluProgram, {uMatrixTex: uMatrixTex});
+		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
+
+		    gluGeometry = glu.Geometry();
+            gluGeometry.makeRect(1024, 1, 0.0000001, 1, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aTexCoord', 'aColor', 'aNormal');
+
+            gluObject = glu.Object(gluGeometry, gluMaterial, [uPMatrix, uColor, uMatrixTexOffset]);
+
+//            renderBuffer = glu.Framebuffer();
+//            renderBuffer.setSize(canvas.width, canvas.height);
+//            renderBuffer.texture.setFilterLinear();
+
+            texPreview = new GLUTIL.TexturePreview(gl, uMatrixTex, 256, 256);
+//            texPreview = new GLUTIL.TexturePreview(gl, renderBuffer.texture, 256, 256);
+
+
+            $(document).mousemove( function(e) {
 		    	mouseX = e.pageX/canvas.width - 0.5;
 		    	mouseY = e.pageY/canvas.height - 0.5;
 		    });
@@ -159,6 +224,7 @@
 		stats.update();
 	}
 	var time = 1000000;
+    var nextI = 0;
 	function render() {
 
         var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
@@ -169,7 +235,8 @@
         	mx = mouseX/mouseLength;
         	my = mouseY/mouseLength;
         }
-		// var time = (new Date()).getTime()*0.001;
+
+//        renderBuffer.setSize(canvas.width, canvas.height);
 		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clearColor(Math.sin(time*0.11)+0.5, Math.sin(time*0.09)+0.5, Math.sin(time*0.1)+0.5, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -179,34 +246,50 @@
         time += 0.01;
         mat4.identity(mvMatrix);
 
-        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
-        mat4.rotate(mvMatrix, mvMatrix, mouseLength*Math.PI, [my, mx, 0]);
-        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*9.92), [0, 1, 0]);
-//        mat4.scale(mvMatrix, [2, 2, 2]);
-        mat4.translate(mvMatrix, mvMatrix, [Math.sin(time*0.987), Math.sin(time*1), Math.sin(time*1.17)]);
-        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*10.92), [0, 0, 1]);
+
+        mat4.translate(mvMatrix, mvMatrix, [0, 0, Math.sin(time) - 2]);
+        mat4.scale(mvMatrix, mvMatrix, [4, 4, 4]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*3.92), [0, 1, 0]);
         mat4.scale(mvMatrix, mvMatrix, [0.125, 0.125, 0.125]);
-//        mat4.scale(mvMatrix, [0.125, 0.125, 0.125]);
-        if(trailsMatrices.length > 1024){
+        mat4.translate(mvMatrix, mvMatrix, [Math.sin(time*16), 0, 0]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*9.92), [0, 1, 0]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*5.92), [1, 0, 0]);
+        mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -1]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*10.92), [0, 0, 1]);
+
+        mat4.translate(mvMatrix, mvMatrix, [Math.sin(time*0.987), Math.sin(time*1), Math.sin(time*1.17)]);
+        mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*2.92), [1, 0, 0]);
+
+        var texOffset = 16*nextI;
+        for(var i = 0; i < 16; ++i){
+            uMatrixTex.data[i+texOffset] = mvMatrix[i];
+        }
+        nextI = (nextI+1)%uMatrixTexLength.length;
+
+        uMatrixTex.setFloatData(uMatrixTex.data, 16, uMatrixTexLength.length, gl.LUMINANCE);
+        uMatrixTexOffset.offset = nextI/uMatrixTexLength.length;
+
+        if(trailsMatrices.length > 4){
             trailsMatrices.shift();
         }
         trailsMatrices.push(mat4.clone(mvMatrix));
 
+        var j = i*0.1+time*5;
+        uColor.color[0] = Math.sin(j*0.11)*0.5+0.5;
+        uColor.color[1] = Math.sin(j*0.111)*0.5+0.5;
+        uColor.color[2] = Math.sin(j*0.109)*0.5+0.5;
+
+//        renderBuffer.bind();
 		gluObject.bind();
-		for(var i = 0; i < trailsMatrices.length-1; ++i){
-            var mat0 = trailsMatrices[i];
-            var mat1 = trailsMatrices[i+1];
-            var j = i*0.1+time*5;
-            uMVMatrix0.matrix = mat0;
-            uMVMatrix1.matrix = mat1;
-            uColor.color[0] = Math.sin(j*0.11)*0.5+0.5;
-			uColor.color[1] = Math.sin(j*0.111)*0.5+0.5;
-			uColor.color[2] = Math.sin(j*0.109)*0.5+0.5;
-            gluObject.updateUniform(uMVMatrix0);
-            gluObject.updateUniform(uMVMatrix1);
-            gluObject.updateUniform(uColor);
-			gluObject.draw();
-		}
+        gluObject.draw();
+        gluObject.unbind();
+//        renderBuffer.unbind();
+
+
+//        texPreview.bind();
+//        texPreview.draw();
+
+
 	}
 
 	init();

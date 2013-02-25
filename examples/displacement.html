@@ -177,9 +177,7 @@
 
 	        updateSize();
 	        gluProgram = glu.Program(
-		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
-		        ['aVertexPosition', 'aTextureCoord', 'aNormal'],//attributes
-		        ['uMVMatrix', 'uPMatrix', 'uColor', 'uDisplacement', 'uDisplacementOffset', 'uSamplerDisplacement', 'uSamplerColor']//uniforms
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')]
 		    );
 
             var txWidth = 2048;

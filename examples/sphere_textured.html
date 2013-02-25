@@ -99,7 +99,7 @@
     var mvMatrixStack = [];
     var pMatrix = mat4.create();
 
-	var uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLight;
+	var uMVMatrix, uPMatrix, uColor, uSampler3Shift, uLight, uLightDirection;
 
     var texturesLoaded = false;
 
@@ -118,9 +118,7 @@
 			gl = glu.gl;
 			updateSize();
 	        gluProgram = glu.Program(
-		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
-		        ['aVertexPosition', 'aTextureCoord', 'aNormal'],//attributes
-		        ['uMVMatrix', 'uPMatrix', 'uColor', 'uSampler1', 'uSampler2', 'uSampler3', 'uSampler4', 'uSampler3Shift', 'uLightDirection']//uniforms
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')]
 		    );
 
 		    gluTexture1 = glu.Texture();

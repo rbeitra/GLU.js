@@ -87,9 +87,7 @@
 			gl = glu.gl;
 			updateSize();
 	        gluProgram = glu.Program(
-		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
-		        ['aVertexPosition'],//attributes
-		        ['uMVMatrix', 'uPMatrix', 'uColor']//uniforms
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')]
 		    );
 
 

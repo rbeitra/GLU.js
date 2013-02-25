@@ -88,16 +88,14 @@
 			
 			updateSize();
 	        gluProgram = glu.Program(
-		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')],//shaders
-		        ['aVertexPosition', 'aColor'],//attributes
-		        ['uMVMatrix', 'uPMatrix']//uniforms
+		        [glu.Shader('shader-fs'), glu.Shader('shader-vs')]
 		    );
 
 		    gluMaterial = glu.Material(gluProgram, {});
 		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
-		    
+
 		    gluGeometry = glu.Geometry();
-		    gluGeometry.makeRect(2, 2, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aColor');
+		    gluGeometry.makeRect(1, 1, 2, 2, {r: 1, g: 1, b: 0, a: 1}, 'aVertexPosition', 'aColor');
 
 		    uMVMatrix = glu.Uniform('uMVMatrix', 'Matrix4fv', {matrix: mvMatrix, transpose: false}, ['transpose', 'matrix']);
 		    uPMatrix = glu.Uniform('uPMatrix', 'Matrix4fv', {matrix: pMatrix, transpose: false}, ['transpose', 'matrix']);
