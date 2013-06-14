@@ -139,6 +139,7 @@
     <script src="js/webgl-utils.js"></script>
     <script src="js/gl-matrix-min.js"></script>
     <script src="../src/GLU.js"></script>
+    <script src="../src/GLUTIL.js"></script>
 
 	<script>
 
@@ -154,11 +155,14 @@
     var gluTexture;
 	var mouseX = 0, mouseY = 0;
 
+    var texturesLoaded = false;
+
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
     var pMatrix = mat4.create();
 
 	var uMVMatrix, uPMatrix, uColor, uDisplacement, uDisplacementOffset;
+    var texPreview;
 
 	function init(){
 		try{
@@ -192,6 +196,7 @@
                     txArray[k+0] = ((u*4)%1) * ((v*8)%1);
                     txArray[k+1] = Math.sin(u*Math.PI*16)*0.5;
                     txArray[k+2] = Math.sin(v*Math.PI*32)*0.5;
+                    // txArray[k+2] = Math.random() - 0.5;
 
                     var z = Math.cos((v)*Math.PI);
                     var vscale = Math.sin(v*Math.PI);
@@ -225,6 +230,14 @@
                 }
             }
 
+            var texturesToLoad = 1;
+            var onTextureLoad = function(){
+                --texturesToLoad;
+                if(texturesToLoad == 0){
+                    texturesLoaded = true;
+                }
+            };
+
             gluTexDisplacement = glu.Texture();
 //            gluTexDisplacement.setFilterMipmap();
             gluTexDisplacement.setFilterLinear();
@@ -234,8 +247,9 @@
             gluTexture = glu.Texture();
             gluTexture.setFilterMipmap();
             gluTexture.setWrapRepeat();
-            gluTexture.loadImage('assets/earth/earthmap1k.jpg', true);
+            gluTexture.loadImage('assets/earth/earthmap1k.jpg', true, onTextureLoad);
 
+            
 		    gluMaterial = glu.Material(gluProgram, {uSamplerDisplacement: gluTexDisplacement, uSamplerColor: gluTexture});
             gluMaterial.setModeTriangles();
 
@@ -250,7 +264,12 @@
 
             gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix, uPMatrix, uColor, uDisplacement, uDisplacementOffset]);
 
-		    $(document).mousemove( function(e) {
+            texPreview = new GLUTIL.TextureSpriteDrawer(gl);
+            texPreview.addSprite(gluTexDisplacement, 0.75, 0.75, 0.25, 0.25);
+            texPreview.addSprite(gluTexture, 0.75, 0.0, 0.25, 0.25);
+
+
+            $(document).mousemove( function(e) {
 		    	mouseX = e.pageX/canvas.width - 0.5;
 		    	mouseY = e.pageY/canvas.height - 0.5;
 		    });
@@ -289,8 +308,10 @@
 
 	function update() {
 		requestAnimationFrame( update );
-		updateSize()
-		render();
+		updateSize();
+        if(texturesLoaded){
+		  render();
+        }
 		stats.update();
 	}
 
@@ -353,6 +374,9 @@
 
 			mvPopMatrix();
 		}
+
+        gluObject.unbind();
+        texPreview.draw();
 	}
 
 	init();

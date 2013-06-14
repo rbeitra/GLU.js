@@ -69,6 +69,7 @@
     var pMatrix = mat4.create();
 
 	var uMVMatrix, uPMatrix;
+	var textureLoaded = false;
 
 	function init(){
 		try{
@@ -92,7 +93,7 @@
 		    );
 			gluTexture = glu.Texture();	    
 	    	gluTexture.setFilterMipmap();
-		    gluTexture.loadImage('assets/sky.jpg', true);
+		    gluTexture.loadImage('assets/sky.jpg', true, function(){textureLoaded = true});
 		    
 		    gluMaterial = glu.Material(gluProgram, {uSampler: gluTexture});
 		    gluMaterial.blendFunction = gluMaterial.blendingDoubleSided;
@@ -141,8 +142,10 @@
 
 	function update() {
 		requestAnimationFrame( update );
-		updateSize()
-		render();
+		updateSize();
+		if(textureLoaded){
+			render();
+		}
 		stats.update();
 	}
 
