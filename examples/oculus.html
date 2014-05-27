@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>GLU</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+		*{
+			margin: 0px;
+			padding: 0px;
+		}
+		html{
+			width: 100%;
+			height: 100%;
+		}
+		body {
+			font-family: Monospace;
+			background-color: #eee;
+			overflow: hidden;
+			width: 100%;
+			height: 100%;
+		}
+		iframe{
+			border: 0;
+			float: left;
+			width: 50%;
+			height: 100%;
+		}
+		</style>
+	</head>
+	<body>
+	<script src="js/jquery-1.7.min.js"></script>
+	<script src="js/PostMouse.js"></script>
+	<script src="js/UrlParams.js"></script>
+	<script>
+		var postMouse = new PostMouse();
+		var url = UrlParams.getUrlVar('url');
+		var eyeShift = {
+			eyeShiftX: 0.5,
+			eyeShiftY: 0,
+			eyeShiftZ: -2
+		}
+		var createIframe = function(src, params){
+			var pairs = [];
+			for(var s in params){
+				pairs.push(''+s+'='+params[s]);
+			}
+			var iframe = document.createElement('iframe');
+			document.body.appendChild(iframe);
+			iframe.src = src+'?'+pairs.join('&');
+		}
+
+		// var srcLeft = url+"?eyeShiftX="+(eyeShift);
+		// var srcRight = url+"?eyeShiftX="+(-eyeShift);
+		createIframe(url, eyeShift);
+		eyeShift.eyeShiftX *= -1;
+		createIframe(url, eyeShift);
+
+	</script>
+	<!-- <iframe src="sphere_textured.html?eyeShift=0.5"></iframe> -->
+	<!-- <iframe src="sphere_textured.html?eyeShift=-0.5"></iframe> -->
+	</body>
+</html>

@@ -102,6 +102,8 @@
     <script src="js/gl-matrix-min.js"></script>
     <script src="../src/GLU.js"></script>
     <script src="../src/GLUTIL.js"></script>
+    <script src="js/PostMouse.js"></script>
+    <script src="js/UrlParams.js"></script>
 
 	<script>
 
@@ -115,7 +117,8 @@
 	var gluObject;
     var renderBuffer;
     var texPreview;
-	var mouseX = 0, mouseY = 0;
+	// var mouseX = 0, mouseY = 0;
+    var postMouse;
 
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
@@ -183,10 +186,12 @@
 //            texPreview = new GLUTIL.TexturePreview(gl, renderBuffer.depthTexture, 256, 256);
 
 
-            $(document).mousemove( function(e) {
-		    	mouseX = e.pageX/canvas.width - 0.5;
-		    	mouseY = e.pageY/canvas.height - 0.5;
-		    });
+            eyeShift = [
+                parseFloat(UrlParams.getUrlVar('eyeShiftX') || 0),
+                parseFloat(UrlParams.getUrlVar('eyeShiftY') || 0),
+                parseFloat(UrlParams.getUrlVar('eyeShiftZ') || 0)
+            ];
+            postMouse = new PostMouse();
 			update();
 
 		} catch (e){
@@ -227,6 +232,8 @@
     var nextI = 0;
 	function render() {
 
+        var mouseX = postMouse.mouseX;
+        var mouseY = postMouse.mouseY;
         var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
         var mx = 0;
         var my = 0;
@@ -247,6 +254,7 @@
         mat4.identity(mvMatrix);
 
 
+        mat4.translate(mvMatrix, mvMatrix, eyeShift);
         mat4.translate(mvMatrix, mvMatrix, [0, 0, Math.sin(time) - 2]);
         mat4.scale(mvMatrix, mvMatrix, [4, 4, 4]);
         mat4.rotate(mvMatrix, mvMatrix, Math.sin(time*3.92), [0, 1, 0]);

@@ -50,6 +50,8 @@
     <script src="js/webgl-utils.js"></script>
     <script src="js/gl-matrix-min.js"></script>
     <script src="../src/GLU.js"></script>
+	<script src="js/PostMouse.js"></script>
+    <script src="js/UrlParams.js"></script>
 
 	<script>
 
@@ -62,7 +64,8 @@
 	var gluMaterial;
 	var gluTexture;
 	var gluObject, gluObject2;
-	var mouseX = 0, mouseY = 0;
+	// var mouseX = 0, mouseY = 0;
+	var postMouse;
 
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
@@ -106,10 +109,12 @@
 		    
 		    gluObject = glu.Object(gluGeometry, gluMaterial, [uMVMatrix, uPMatrix]);
 
-		    $(document).mousemove( function(e) {
-		    	mouseX = e.pageX/canvas.width - 0.5;
-		    	mouseY = e.pageY/canvas.height - 0.5;
-		    });
+		    eyeShift = [
+                parseFloat(UrlParams.getUrlVar('eyeShiftX') || 0),
+                parseFloat(UrlParams.getUrlVar('eyeShiftY') || 0),
+                parseFloat(UrlParams.getUrlVar('eyeShiftZ') || 0)
+            ];
+            postMouse = new PostMouse();
 			update();
 
 		} catch (e){
@@ -150,7 +155,8 @@
 	}
 
 	function render() {
-
+		var mouseX = postMouse.mouseX;
+        var mouseY = postMouse.mouseY;
         var mouseLength = Math.sqrt(mouseX*mouseX+mouseY*mouseY);
         var mx = 0;
         var my = 0;
@@ -169,6 +175,7 @@
         mat4.identity(mvMatrix);
 
         mat4.translate(mvMatrix, mvMatrix, [0.0, 0.0, -4]);
+        mat4.translate(mvMatrix, mvMatrix, eyeShift);
         mat4.rotate(mvMatrix, mvMatrix, 4*mouseLength*Math.PI, [my, mx, 0]);
         mat4.rotate(mvMatrix, mvMatrix, time*0.1, [0, 1, 0]);
 
